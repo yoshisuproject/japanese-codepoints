@@ -1,4 +1,3 @@
-// D:\github\japanese-codepoints\src\data\tests.rs
 #[cfg(test)]
 mod tests {
     use crate::codepoints::CodePoints;
@@ -129,12 +128,14 @@ mod tests {
     #[test]
     fn test_jisx0213_kanji() {
         let cp = CodePoints::new(JISX0213_KANJI.to_vec());
+        // Level 1
         assert!(cp.contains(
             "亜唖娃阿哀愛挨姶逢葵茜穐悪握渥旭葦芦鯵梓圧斡扱宛姐虻飴絢綾鮎或粟袷安庵按暗案闇鞍杏"
-        )); // Level 1
-        assert!(cp.contains("弌丐丕个丱丶丼丿乂乖乘亂亅豫亊舒弍于亞亟亠亢亰亳亶从仍仄仆仂仗")); // Level 2
-                                                                                                // Test some Level 3 kanji (CJK Unified Ideographs Extension A)
-        assert!(cp.contains(""));
+        ));
+        // Level 2
+        assert!(cp.contains("弌丐丕个丱丶丼丿乂乖乘亂亅豫亊舒弍于亞亟亠亢亰亳亶从仍仄仆仂仗"));
+        // Test some Level 3 kanji (CJK Unified Ideographs Extension A)
+        assert!(cp.contains("㐂㠯㒵"));
         // Test some Level 4 kanji (CJK Unified Ideographs Extension B)
         assert!(cp.contains("俱剝頰"));
         assert!(!cp.contains("a"));

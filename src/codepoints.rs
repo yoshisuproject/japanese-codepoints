@@ -1,7 +1,12 @@
-//! Core code points functionality
+//! Core code-point collection type and multi-set membership helper.
 //!
-//! This module provides the main `CodePoints` struct and related functionality
-//! for handling character code points.
+//! [`CodePoints`] is the central data structure: an immutable set of Unicode
+//! scalar values that can efficiently test membership for individual
+//! characters or entire strings.
+//!
+//! The free function [`contains_all_in_any`] extends membership testing to
+//! multiple sets at once — useful when a string may legally contain characters
+//! from several scripts simultaneously.
 
 use std::collections::HashSet;
 use std::fmt;
@@ -9,40 +14,41 @@ use std::sync::OnceLock;
 
 use crate::data::ascii;
 
-/// Represents a collection of Unicode code points.
+// ── main type ─────────────────────────────────────────────────────────────────
+
+/// An immutable collection of Unicode code points.
 ///
-/// This struct provides functionality for checking if strings contain only
-/// the specified code points, and for performing set operations on code point collections.
+/// The primary use-case is character-set validation: given a policy (e.g.
+/// "only JIS X 0208 hiragana"), quickly determine whether a string conforms.
 ///
 /// # Examples
 ///
 /// ```rust
 /// use japanese_codepoints::CodePoints;
 ///
-/// let cp = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-/// assert!(cp.contains("あ"));
-/// assert!(cp.contains("い"));
-/// assert!(!cp.contains("う"));
+/// let allowed = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
+/// assert!(allowed.contains("あい"));
+/// assert!(!allowed.contains("う"));
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CodePoints {
-    /// The set of allowed code points
     codepoints: HashSet<u32>,
 }
 
+// ── constructors ──────────────────────────────────────────────────────────────
+
 impl CodePoints {
-    /// Creates a new `CodePoints` instance from a vector of code points.
+    /// Creates a `CodePoints` from a `Vec` of code-point values.
     ///
-    /// # Arguments
-    ///
-    /// * `codepoints` - A vector of Unicode code points (u32)
+    /// Duplicate values are silently de-duplicated.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use japanese_codepoints::CodePoints;
-    /// let cp = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-    /// assert!(cp.contains("あ"));
+    ///
+    /// let cp = CodePoints::new(vec![0x3042, 0x3042, 0x3044]);
+    /// assert_eq!(cp.len(), 2);
     /// ```
     pub fn new(codepoints: Vec<u32>) -> Self {
         Self {
@@ -50,38 +56,50 @@ impl CodePoints {
         }
     }
 
-    /// Creates a new `CodePoints` instance from a string.
+    /// Creates a `CodePoints` from a slice of code-point values.
     ///
-    /// This method extracts all unique code points from the given string.
-    ///
-    /// # Arguments
-    ///
-    /// * `s` - A string containing the code points
+    /// This is the preferred constructor when the source data is a static or
+    /// borrowed `&[u32]` because it avoids an intermediate `Vec` allocation.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use japanese_codepoints::CodePoints;
     ///
-    /// let cp = CodePoints::from_string("あい");
-    /// assert!(cp.contains("あ"));
-    /// assert!(cp.contains("い"));
+    /// const HIRAGANA_AI: &[u32] = &[0x3042, 0x3044];
+    /// let cp = CodePoints::from_slice(HIRAGANA_AI);
+    /// assert!(cp.contains("あい"));
     /// ```
-    pub fn from_string(s: &str) -> Self {
-        let codepoints: HashSet<u32> = s.chars().map(|c| c as u32).collect();
-        Self { codepoints }
+    pub fn from_slice(slice: &[u32]) -> Self {
+        Self {
+            codepoints: slice.iter().copied().collect(),
+        }
     }
 
-    /// Checks if the given string contains only code points from this collection.
+    /// Creates a `CodePoints` by extracting every unique code point from a
+    /// string.
     ///
-    /// # Arguments
+    /// # Examples
     ///
-    /// * `s` - The string to check
+    /// ```rust
+    /// use japanese_codepoints::CodePoints;
     ///
-    /// # Returns
+    /// let cp = CodePoints::from_string("あいあ");
+    /// assert_eq!(cp.len(), 2); // あ deduplicated
+    /// ```
+    pub fn from_string(s: &str) -> Self {
+        Self {
+            codepoints: s.chars().map(|c| c as u32).collect(),
+        }
+    }
+}
+
+// ── membership ────────────────────────────────────────────────────────────────
+
+impl CodePoints {
+    /// Returns `true` if **every** character in `text` belongs to this set.
     ///
-    /// `true` if all characters in the string are in this code point collection,
-    /// `false` otherwise.
+    /// An empty string is always considered valid (vacuously true).
     ///
     /// # Examples
     ///
@@ -89,90 +107,90 @@ impl CodePoints {
     /// use japanese_codepoints::CodePoints;
     ///
     /// let cp = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-    /// assert!(cp.contains("あ"));
     /// assert!(cp.contains("あい"));
-    /// assert!(!cp.contains("あいう"));
+    /// assert!(!cp.contains("う"));
+    /// assert!(cp.contains(""));   // empty string
     /// ```
     pub fn contains(&self, s: &str) -> bool {
         s.chars().all(|c| self.codepoints.contains(&(c as u32)))
     }
 
-    /// Returns the first code point in the string that is not in this collection, along with its character index.
-    ///
-    /// # Arguments
-    ///
-    /// * `s` - The string to check
-    ///
-    /// # Returns
-    ///
-    /// `Some((code_point, char_index))` if a disallowed character is found, where `char_index` is the index of the character (not byte index) in the string.
-    /// Returns `None` if all characters are allowed.
-    ///
-    /// # Note
-    ///
-    /// The returned index is the character index (as in `.chars().enumerate()`), not the byte index.
+    /// Returns `true` if the single character `c` belongs to this set.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use japanese_codepoints::CodePoints;
+    ///
+    /// let cp = CodePoints::new(vec![0x3042]); // あ
+    /// assert!(cp.contains_char('あ'));
+    /// assert!(!cp.contains_char('い'));
+    /// ```
+    pub fn contains_char(&self, c: char) -> bool {
+        self.codepoints.contains(&(c as u32))
+    }
+
+    /// Returns the first code point in `text` that is **not** in this set,
+    /// together with its zero-based character index (not byte index).
+    ///
+    /// Returns `None` when every character is allowed.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use japanese_codepoints::CodePoints;
+    ///
     /// let cp = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-    /// assert_eq!(cp.first_excluded_with_position("あい"), None);
-    /// assert_eq!(cp.first_excluded_with_position("あいう"), Some((0x3046, 2))); // う at char index 2
+    /// assert_eq!(cp.first_excluded_with_position("あいう"), Some((0x3046, 2)));
+    /// assert_eq!(cp.first_excluded_with_position("あい"),   None);
     /// ```
     pub fn first_excluded_with_position(&self, s: &str) -> Option<(u32, usize)> {
-        s.chars().enumerate().find_map(|(char_idx, c)| {
+        s.chars().enumerate().find_map(|(i, c)| {
             let cp = c as u32;
-            if !self.codepoints.contains(&cp) {
-                Some((cp, char_idx))
-            } else {
+            if self.codepoints.contains(&cp) {
                 None
+            } else {
+                Some((cp, i))
             }
         })
     }
 
-    /// Returns the first code point in the string that is not in this collection.
+    /// Returns the first code point in `text` that is **not** in this set.
     ///
-    /// # Arguments
-    ///
-    /// * `s` - The string to check
-    ///
-    /// # Returns
-    ///
-    /// `Some(code_point)` if a disallowed character is found, `None` otherwise.
+    /// This is a convenience wrapper around [`Self::first_excluded_with_position`]
+    /// that discards the position.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use japanese_codepoints::CodePoints;
+    ///
     /// let cp = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
     /// assert_eq!(cp.first_excluded("あいう"), Some(0x3046)); // う
-    /// assert_eq!(cp.first_excluded("あい"), None);
+    /// assert_eq!(cp.first_excluded("あい"),   None);
     /// ```
     pub fn first_excluded(&self, s: &str) -> Option<u32> {
         self.first_excluded_with_position(s).map(|(cp, _)| cp)
     }
 
-    /// Returns all unique code points in the string that are not in this collection.
+    /// Returns all unique code points in `text` that are **not** in this set.
     ///
-    /// # Arguments
-    ///
-    /// * `s` - The string to check
-    ///
-    /// # Returns
-    ///
-    /// A vector of unique excluded code points (no duplicates, order not guaranteed).
+    /// The returned vector preserves **first-occurrence order**: the first
+    /// excluded character encountered while scanning `text` left-to-right
+    /// appears first.  Each excluded code point appears exactly once even if
+    /// it occurs multiple times in the input.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use japanese_codepoints::CodePoints;
+    ///
     /// let cp = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-    /// let excluded = cp.all_excluded("あいうえ");
-    /// assert_eq!(excluded, vec![0x3046, 0x3048]); // う, え
+    /// // う then え, first-occurrence order
+    /// assert_eq!(cp.all_excluded("あいうえ"), vec![0x3046, 0x3048]);
     /// ```
     pub fn all_excluded(&self, s: &str) -> Vec<u32> {
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = HashSet::new();
         let mut result = Vec::new();
         for c in s.chars() {
             let cp = c as u32;
@@ -182,180 +200,15 @@ impl CodePoints {
         }
         result
     }
+}
 
-    /// Returns the union of this code point collection with another.
-    ///
-    /// # Arguments
-    ///
-    /// * `other` - Another `CodePoints` instance
-    ///
-    /// # Returns
-    ///
-    /// A new `CodePoints` instance containing all code points from both collections.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use japanese_codepoints::CodePoints;
-    ///
-    /// let cp1 = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-    /// let cp2 = CodePoints::new(vec![0x3044, 0x3046]); // い, う
-    /// let union = cp1.union(&cp2);
-    /// assert!(union.contains("あいう"));
-    /// ```
-    pub fn union(&self, other: &CodePoints) -> CodePoints {
-        let mut codepoints = self.codepoints.clone();
-        codepoints.extend(&other.codepoints);
-        CodePoints { codepoints }
-    }
+// ── validation ────────────────────────────────────────────────────────────────
 
-    /// Returns the intersection of this code point collection with another.
+impl CodePoints {
+    /// Validates that every character in `text` belongs to this set.
     ///
-    /// # Arguments
-    ///
-    /// * `other` - Another `CodePoints` instance
-    ///
-    /// # Returns
-    ///
-    /// A new `CodePoints` instance containing only code points present in both collections.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use japanese_codepoints::CodePoints;
-    ///
-    /// let cp1 = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-    /// let cp2 = CodePoints::new(vec![0x3044, 0x3046]); // い, う
-    /// let intersection = cp1.intersection(&cp2);
-    /// assert!(intersection.contains("い"));
-    /// assert!(!intersection.contains("あ"));
-    /// assert!(!intersection.contains("う"));
-    /// ```
-    pub fn intersection(&self, other: &CodePoints) -> CodePoints {
-        let codepoints: HashSet<u32> = self
-            .codepoints
-            .intersection(&other.codepoints)
-            .cloned()
-            .collect();
-        CodePoints { codepoints }
-    }
-
-    /// Returns the difference of this code point collection with another.
-    ///
-    /// # Arguments
-    ///
-    /// * `other` - Another `CodePoints` instance
-    ///
-    /// # Returns
-    ///
-    /// A new `CodePoints` instance containing code points in this collection
-    /// but not in the other.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use japanese_codepoints::CodePoints;
-    ///
-    /// let cp1 = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-    /// let cp2 = CodePoints::new(vec![0x3044, 0x3046]); // い, う
-    /// let difference = cp1.difference(&cp2);
-    /// assert!(difference.contains("あ"));
-    /// assert!(!difference.contains("い"));
-    /// ```
-    pub fn difference(&self, other: &CodePoints) -> CodePoints {
-        let codepoints: HashSet<u32> = self
-            .codepoints
-            .difference(&other.codepoints)
-            .cloned()
-            .collect();
-        CodePoints { codepoints }
-    }
-
-    /// Returns the number of code points in this collection.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use japanese_codepoints::CodePoints;
-    ///
-    /// let cp = CodePoints::new(vec![0x3042, 0x3044, 0x3046]); // あ, い, う
-    /// assert_eq!(cp.len(), 3);
-    /// ```
-    pub fn len(&self) -> usize {
-        self.codepoints.len()
-    }
-
-    /// Returns `true` if this collection contains no code points.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use japanese_codepoints::CodePoints;
-    ///
-    /// let cp = CodePoints::new(vec![]);
-    /// assert!(cp.is_empty());
-    /// ```
-    pub fn is_empty(&self) -> bool {
-        self.codepoints.is_empty()
-    }
-
-    /// Returns an iterator over the code points in this collection.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use japanese_codepoints::CodePoints;
-    ///
-    /// let cp = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-    /// let mut iter = cp.iter();
-    /// let first = iter.next();
-    /// let second = iter.next();
-    /// assert_eq!(iter.next(), None);
-    /// assert!(first.is_some());
-    /// assert!(second.is_some());
-    /// ```
-    pub fn iter(&self) -> std::collections::hash_set::Iter<u32> {
-        self.codepoints.iter()
-    }
-
-    // ASCII character set factory methods
-
-    /// Creates a new CodePoints instance with ASCII control characters.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use japanese_codepoints::CodePoints;
-    ///
-    /// let cp = CodePoints::ascii_control();
-    /// assert!(cp.contains("\n"));
-    /// assert!(cp.contains("\r"));
-    /// assert!(!cp.contains("a"));
-    /// ```
-    pub fn ascii_control() -> Self {
-        Self::new(ascii::CONTROL_CHARS.to_vec())
-    }
-
-    /// Returns a cached instance of ASCII control characters CodePoints.
-    ///
-    /// This method uses static caching to avoid repeated allocation.
-    /// Subsequent calls return the same cached instance.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use japanese_codepoints::CodePoints;
-    ///
-    /// let cp1 = CodePoints::ascii_control_cached();
-    /// let cp2 = CodePoints::ascii_control_cached();
-    /// // Both instances share the same underlying data
-    /// ```
-    pub fn ascii_control_cached() -> &'static CodePoints {
-        static ASCII_CONTROL: OnceLock<CodePoints> = OnceLock::new();
-        ASCII_CONTROL.get_or_init(|| Self::ascii_control())
-    }
-
-    /// Creates a new CodePoints instance with ASCII printable characters.
+    /// Returns `Ok(())` if all characters are valid.  On failure, returns an
+    /// error that identifies the first offending character and its position.
     ///
     /// # Examples
     ///
@@ -363,34 +216,244 @@ impl CodePoints {
     /// use japanese_codepoints::CodePoints;
     ///
     /// let cp = CodePoints::ascii_printable();
-    /// assert!(cp.contains("Hello"));
-    /// assert!(cp.contains("123"));
-    /// assert!(!cp.contains("あ"));
-    /// ```
-    pub fn ascii_printable() -> Self {
-        Self::new(ascii::PRINTABLE_CHARS.to_vec())
-    }
-
-    /// Returns a cached instance of ASCII printable characters CodePoints.
+    /// assert!(cp.validate("hello").is_ok());
     ///
-    /// This method uses static caching to avoid repeated allocation.
-    /// Subsequent calls return the same cached instance.
+    /// let err = cp.validate("hello\0world").unwrap_err();
+    /// assert_eq!(err.code_point, 0);  // NULL
+    /// assert_eq!(err.position, 5);
+    /// ```
+    pub fn validate(&self, text: &str) -> Result<(), crate::validation::ValidationError> {
+        match self.first_excluded_with_position(text) {
+            None => Ok(()),
+            Some((cp, pos)) => Err(crate::validation::ValidationError::new(cp, pos)),
+        }
+    }
+}
+
+// ── set operations ────────────────────────────────────────────────────────────
+
+impl CodePoints {
+    /// Returns a new set that is the **union** of `self` and `other`.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use japanese_codepoints::CodePoints;
     ///
-    /// let cp1 = CodePoints::ascii_printable_cached();
-    /// let cp2 = CodePoints::ascii_printable_cached();
-    /// // Both instances share the same underlying data
+    /// let a = CodePoints::new(vec![0x3042]);          // あ
+    /// let b = CodePoints::new(vec![0x3044]);          // い
+    /// assert!(a.union(&b).contains("あい"));
     /// ```
-    pub fn ascii_printable_cached() -> &'static CodePoints {
-        static ASCII_PRINTABLE: OnceLock<CodePoints> = OnceLock::new();
-        ASCII_PRINTABLE.get_or_init(|| Self::ascii_printable())
+    pub fn union(&self, other: &CodePoints) -> CodePoints {
+        let mut codepoints = self.codepoints.clone();
+        codepoints.extend(&other.codepoints);
+        CodePoints { codepoints }
     }
 
-    /// Creates a new CodePoints instance with CRLF characters.
+    /// Returns a new set containing only the code points present in **both**
+    /// `self` and `other`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use japanese_codepoints::CodePoints;
+    ///
+    /// let a = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
+    /// let b = CodePoints::new(vec![0x3044, 0x3046]); // い, う
+    /// let i = a.intersection(&b);
+    /// assert!(i.contains("い"));
+    /// assert!(!i.contains("あ"));
+    /// ```
+    pub fn intersection(&self, other: &CodePoints) -> CodePoints {
+        CodePoints {
+            codepoints: self
+                .codepoints
+                .intersection(&other.codepoints)
+                .copied()
+                .collect(),
+        }
+    }
+
+    /// Returns a new set containing code points in `self` but **not** in
+    /// `other`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use japanese_codepoints::CodePoints;
+    ///
+    /// let a = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
+    /// let b = CodePoints::new(vec![0x3044, 0x3046]); // い, う
+    /// let d = a.difference(&b);
+    /// assert!(d.contains("あ"));
+    /// assert!(!d.contains("い"));
+    /// ```
+    pub fn difference(&self, other: &CodePoints) -> CodePoints {
+        CodePoints {
+            codepoints: self
+                .codepoints
+                .difference(&other.codepoints)
+                .copied()
+                .collect(),
+        }
+    }
+
+    /// Returns a new set containing code points that are in **either** `self`
+    /// or `other`, but not in both (symmetric difference / XOR).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use japanese_codepoints::CodePoints;
+    ///
+    /// let a = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
+    /// let b = CodePoints::new(vec![0x3044, 0x3046]); // い, う
+    /// let s = a.symmetric_difference(&b);
+    /// assert!(s.contains("あ"));
+    /// assert!(s.contains("う"));
+    /// assert!(!s.contains("い"));
+    /// ```
+    pub fn symmetric_difference(&self, other: &CodePoints) -> CodePoints {
+        CodePoints {
+            codepoints: self
+                .codepoints
+                .symmetric_difference(&other.codepoints)
+                .copied()
+                .collect(),
+        }
+    }
+
+    /// Returns `true` if every code point in `self` is also in `other`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use japanese_codepoints::CodePoints;
+    ///
+    /// let small = CodePoints::new(vec![0x3042]);                // あ
+    /// let big   = CodePoints::new(vec![0x3042, 0x3044]);        // あ, い
+    /// assert!(small.is_subset_of(&big));
+    /// assert!(!big.is_subset_of(&small));
+    /// ```
+    pub fn is_subset_of(&self, other: &CodePoints) -> bool {
+        self.codepoints.is_subset(&other.codepoints)
+    }
+
+    /// Returns `true` if every code point in `other` is also in `self`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use japanese_codepoints::CodePoints;
+    ///
+    /// let big   = CodePoints::new(vec![0x3042, 0x3044]);        // あ, い
+    /// let small = CodePoints::new(vec![0x3042]);                // あ
+    /// assert!(big.is_superset_of(&small));
+    /// ```
+    pub fn is_superset_of(&self, other: &CodePoints) -> bool {
+        self.codepoints.is_superset(&other.codepoints)
+    }
+}
+
+// ── size / iteration ──────────────────────────────────────────────────────────
+
+impl CodePoints {
+    /// Returns the number of code points in this set.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use japanese_codepoints::CodePoints;
+    ///
+    /// let cp = CodePoints::new(vec![0x3042, 0x3044]);
+    /// assert_eq!(cp.len(), 2);
+    /// ```
+    pub fn len(&self) -> usize {
+        self.codepoints.len()
+    }
+
+    /// Returns `true` if the set contains no code points.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use japanese_codepoints::CodePoints;
+    ///
+    /// assert!(CodePoints::new(vec![]).is_empty());
+    /// assert!(!CodePoints::new(vec![0x41]).is_empty());
+    /// ```
+    pub fn is_empty(&self) -> bool {
+        self.codepoints.is_empty()
+    }
+
+    /// Returns an iterator over the code points in this set.
+    ///
+    /// > **Note:** iteration order is **not** guaranteed.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use japanese_codepoints::CodePoints;
+    ///
+    /// let cp = CodePoints::new(vec![0x3042, 0x3044]);
+    /// assert_eq!(cp.iter().count(), 2);
+    /// ```
+    pub fn iter(&self) -> std::collections::hash_set::Iter<'_, u32> {
+        self.codepoints.iter()
+    }
+}
+
+// ── ASCII factory methods ─────────────────────────────────────────────────────
+
+impl CodePoints {
+    /// Creates a new set containing all ASCII **control** characters
+    /// (U+0000–U+001F and U+007F).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use japanese_codepoints::CodePoints;
+    ///
+    /// let cp = CodePoints::ascii_control();
+    /// assert!(cp.contains("\n\r\t"));
+    /// assert!(!cp.contains("a"));
+    /// ```
+    pub fn ascii_control() -> Self {
+        Self::from_slice(ascii::CONTROL_CHARS)
+    }
+
+    /// Returns a cached static reference to the ASCII control character set.
+    ///
+    /// Equivalent to [`Self::ascii_control`] but allocated only once via
+    /// [`OnceLock`].
+    pub fn ascii_control_cached() -> &'static CodePoints {
+        static INSTANCE: OnceLock<CodePoints> = OnceLock::new();
+        INSTANCE.get_or_init(Self::ascii_control)
+    }
+
+    /// Creates a new set containing all ASCII **printable** characters
+    /// (U+0020–U+007E).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use japanese_codepoints::CodePoints;
+    ///
+    /// let cp = CodePoints::ascii_printable();
+    /// assert!(cp.contains("Hello 123!"));
+    /// assert!(!cp.contains("あ"));
+    /// ```
+    pub fn ascii_printable() -> Self {
+        Self::from_slice(ascii::PRINTABLE_CHARS)
+    }
+
+    /// Returns a cached static reference to the ASCII printable character set.
+    pub fn ascii_printable_cached() -> &'static CodePoints {
+        static INSTANCE: OnceLock<CodePoints> = OnceLock::new();
+        INSTANCE.get_or_init(Self::ascii_printable)
+    }
+
+    /// Creates a new set containing only CR (U+000D) and LF (U+000A).
     ///
     /// # Examples
     ///
@@ -398,34 +461,21 @@ impl CodePoints {
     /// use japanese_codepoints::CodePoints;
     ///
     /// let cp = CodePoints::crlf();
-    /// assert!(cp.contains("\n"));
-    /// assert!(cp.contains("\r"));
-    /// assert!(!cp.contains("a"));
+    /// assert!(cp.contains("\r\n"));
+    /// assert!(!cp.contains("\t"));
     /// ```
     pub fn crlf() -> Self {
-        Self::new(ascii::CRLF_CHARS.to_vec())
+        Self::from_slice(ascii::CRLF_CHARS)
     }
 
-    /// Returns a cached instance of CRLF characters CodePoints.
-    ///
-    /// This method uses static caching to avoid repeated allocation.
-    /// Subsequent calls return the same cached instance.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use japanese_codepoints::CodePoints;
-    ///
-    /// let cp1 = CodePoints::crlf_cached();
-    /// let cp2 = CodePoints::crlf_cached();
-    /// // Both instances share the same underlying data
-    /// ```
+    /// Returns a cached static reference to the CRLF character set.
     pub fn crlf_cached() -> &'static CodePoints {
-        static CRLF: OnceLock<CodePoints> = OnceLock::new();
-        CRLF.get_or_init(|| Self::crlf())
+        static INSTANCE: OnceLock<CodePoints> = OnceLock::new();
+        INSTANCE.get_or_init(Self::crlf)
     }
 
-    /// Creates a new CodePoints instance with all ASCII characters.
+    /// Creates a new set containing **all** 128 ASCII characters
+    /// (control + printable).
     ///
     /// # Examples
     ///
@@ -433,168 +483,25 @@ impl CodePoints {
     /// use japanese_codepoints::CodePoints;
     ///
     /// let cp = CodePoints::ascii_all();
-    /// assert!(cp.contains("Hello"));
-    /// assert!(cp.contains("\n"));
+    /// assert!(cp.contains("Hello\n"));
     /// assert!(!cp.contains("あ"));
     /// ```
     pub fn ascii_all() -> Self {
-        Self::new(ascii::ALL_ASCII.to_vec())
+        let mut cps = HashSet::new();
+        cps.extend(ascii::CONTROL_CHARS.iter());
+        cps.extend(ascii::PRINTABLE_CHARS.iter());
+        // CRLF is a subset of CONTROL_CHARS; extend on a HashSet is idempotent.
+        Self { codepoints: cps }
     }
 
-    /// Returns a cached instance of all ASCII characters CodePoints.
-    ///
-    /// This method uses static caching to avoid repeated allocation.
-    /// Subsequent calls return the same cached instance.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use japanese_codepoints::CodePoints;
-    ///
-    /// let cp1 = CodePoints::ascii_all_cached();
-    /// let cp2 = CodePoints::ascii_all_cached();
-    /// // Both instances share the same underlying data
-    /// ```
+    /// Returns a cached static reference to the full ASCII character set.
     pub fn ascii_all_cached() -> &'static CodePoints {
-        static ASCII_ALL: OnceLock<CodePoints> = OnceLock::new();
-        ASCII_ALL.get_or_init(|| Self::ascii_all())
-    }
-
-    /// Returns `true` if this collection is a subset of another `CodePoints` collection.
-    ///
-    /// # Arguments
-    ///
-    /// * `other` - Another `CodePoints` instance
-    ///
-    /// # Returns
-    ///
-    /// `true` if all code points in this collection are also in `other`.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use japanese_codepoints::CodePoints;
-    /// let cp1 = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-    /// let cp2 = CodePoints::new(vec![0x3042, 0x3044, 0x3046]); // あ, い, う
-    /// assert!(cp1.is_subset_of(&cp2));
-    /// ```
-    pub fn is_subset_of(&self, other: &CodePoints) -> bool {
-        self.codepoints.is_subset(&other.codepoints)
-    }
-
-    /// Returns `true` if this collection is a superset of another `CodePoints` collection.
-    ///
-    /// # Arguments
-    ///
-    /// * `other` - Another `CodePoints` instance
-    ///
-    /// # Returns
-    ///
-    /// `true` if all code points in `other` are also in this collection.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use japanese_codepoints::CodePoints;
-    /// let cp1 = CodePoints::new(vec![0x3042, 0x3044, 0x3046]); // あ, い, う
-    /// let cp2 = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-    /// assert!(cp1.is_superset_of(&cp2));
-    /// ```
-    pub fn is_superset_of(&self, other: &CodePoints) -> bool {
-        self.codepoints.is_superset(&other.codepoints)
-    }
-
-    /// Returns the symmetric difference of this code point collection with another.
-    ///
-    /// # Arguments
-    ///
-    /// * `other` - Another `CodePoints` instance
-    ///
-    /// # Returns
-    ///
-    /// A new `CodePoints` instance containing code points that are in either collection but not in both.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use japanese_codepoints::CodePoints;
-    /// let cp1 = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-    /// let cp2 = CodePoints::new(vec![0x3044, 0x3046]); // い, う
-    /// let diff = cp1.symmetric_difference(&cp2);
-    /// assert!(diff.contains("あ"));
-    /// assert!(diff.contains("う"));
-    /// assert!(!diff.contains("い"));
-    /// ```
-    pub fn symmetric_difference(&self, other: &CodePoints) -> CodePoints {
-        let diff = self
-            .codepoints
-            .symmetric_difference(&other.codepoints)
-            .cloned()
-            .collect();
-        CodePoints::new(diff)
-    }
-
-    /// Checks if the given string contains only code points that are valid in ANY of the provided code point collections.
-    ///
-    /// This is equivalent to the Java method `containsAllInAnyCodePoints`.
-    /// Returns `true` if all characters in the string are included in at least one of the code point collections.
-    ///
-    /// # Arguments
-    ///
-    /// * `s` - The string to check
-    /// * `codepoints_list` - A slice of `CodePoints` instances to check against
-    ///
-    /// # Returns
-    ///
-    /// `true` if all code points in the given string are included in any of the code points list,
-    /// `false` otherwise.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use japanese_codepoints::CodePoints;
-    ///
-    /// let hiragana = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-    /// let katakana = CodePoints::new(vec![0x30A2, 0x30A4]); // ア, イ
-    /// let mixed_text = "あア"; // Contains both hiragana and katakana
-    ///
-    /// // Each character is valid in at least one collection
-    /// assert!(CodePoints::contains_all_in_any("あア", &[hiragana, katakana]));
-    /// ```
-    pub fn contains_all_in_any(s: &str, codepoints_list: &[CodePoints]) -> bool {
-        use std::collections::HashMap;
-
-        if codepoints_list.is_empty() {
-            return false;
-        }
-
-        let mut excluded_counts: HashMap<u32, usize> = HashMap::new();
-
-        for codepoints in codepoints_list {
-            let excluded = codepoints.all_excluded(s);
-            if excluded.is_empty() {
-                // If any CodePoints collection accepts all characters, return true immediately
-                return true;
-            }
-
-            for codepoint in excluded {
-                // Count how many CodePoints collections exclude each character
-                *excluded_counts.entry(codepoint).or_insert(0) += 1;
-            }
-        }
-
-        // Check if any character is excluded by all collections
-        for (_, count) in excluded_counts {
-            if count == codepoints_list.len() {
-                // This character is excluded by all collections
-                return false;
-            }
-        }
-
-        // All characters are accepted by at least one collection
-        true
+        static INSTANCE: OnceLock<CodePoints> = OnceLock::new();
+        INSTANCE.get_or_init(Self::ascii_all)
     }
 }
+
+// ── trait implementations ────────────────────────────────────────────────────
 
 impl fmt::Display for CodePoints {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -616,73 +523,120 @@ impl From<&str> for CodePoints {
 
 impl std::hash::Hash for CodePoints {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        // Sort the code points to ensure consistent hashing
-        let mut sorted_codepoints: Vec<&u32> = self.codepoints.iter().collect();
-        sorted_codepoints.sort();
-        sorted_codepoints.hash(state);
+        // Sort for deterministic hashing regardless of HashSet iteration order.
+        let mut sorted: Vec<&u32> = self.codepoints.iter().collect();
+        sorted.sort_unstable();
+        sorted.hash(state);
     }
 }
+
+// ── multi-set membership ──────────────────────────────────────────────────────
+
+/// Returns `true` if **every** character in `text` belongs to **at least one**
+/// of the provided character sets.
+///
+/// This is the idiomatic way to check text that may contain characters from
+/// multiple scripts — for example Japanese hiragana mixed with ASCII
+/// punctuation.
+///
+/// # Edge cases
+///
+/// * An empty `text` returns `true` (vacuously).
+/// * An empty `sets` slice returns `false` for any input (including empty).
+///
+/// # Examples
+///
+/// ```rust
+/// use japanese_codepoints::{CodePoints, contains_all_in_any};
+///
+/// let hiragana = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
+/// let katakana = CodePoints::new(vec![0x30A2, 0x30A4]); // ア, イ
+///
+/// // Each character is valid in at least one set
+/// assert!(contains_all_in_any("あア", &[&hiragana, &katakana]));
+///
+/// // 'x' is not in either set
+/// assert!(!contains_all_in_any("あx", &[&hiragana, &katakana]));
+/// ```
+pub fn contains_all_in_any(text: &str, sets: &[&CodePoints]) -> bool {
+    if sets.is_empty() {
+        return false;
+    }
+    text.chars()
+        .all(|c| sets.iter().any(|set| set.contains_char(c)))
+}
+
+// ── tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    // ── construction ──────────────────────────────────────────────────────
+
     #[test]
-    fn test_new() {
-        let cp = CodePoints::new(vec![0x3041, 0x3042]); // あ, い
+    fn test_new_deduplicates() {
+        let cp = CodePoints::new(vec![0x3042, 0x3042, 0x3044]);
+        assert_eq!(cp.len(), 2);
+    }
+
+    #[test]
+    fn test_from_slice() {
+        let cp = CodePoints::from_slice(&[0x3042, 0x3044]);
+        assert!(cp.contains("あい"));
         assert_eq!(cp.len(), 2);
     }
 
     #[test]
     fn test_from_string() {
-        let cp = CodePoints::from_string("あい");
+        let cp = CodePoints::from_string("あいあ");
         assert_eq!(cp.len(), 2);
-        assert!(cp.contains("あ"));
-        assert!(cp.contains("い"));
+        assert!(cp.contains("あい"));
     }
 
     #[test]
-    fn test_contains() {
+    fn test_empty() {
+        let cp = CodePoints::new(vec![]);
+        assert!(cp.is_empty());
+        assert!(cp.contains("")); // empty string is always valid
+        assert!(!cp.contains("a")); // any character fails
+    }
+
+    // ── membership ────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_contains_basic() {
         let cp = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
         assert!(cp.contains("あ"));
-        assert!(cp.contains("い"));
         assert!(cp.contains("あい"));
         assert!(!cp.contains("う"));
         assert!(!cp.contains("あいう"));
+        assert!(cp.contains(""));
     }
 
     #[test]
-    fn test_contains_null_and_empty() {
-        let cp = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-
-        // Test empty string (should be valid)
-        assert!(cp.contains(""));
-
-        // Test with space character (not in our set, should be invalid)
-        assert!(!cp.contains(" ")); // Space character not in set
+    fn test_contains_char() {
+        let cp = CodePoints::new(vec![0x3042]); // あ
+        assert!(cp.contains_char('あ'));
+        assert!(!cp.contains_char('い'));
     }
 
     #[test]
     fn test_contains_surrogate_pairs() {
-        // Test with surrogate pair characters (like emoji)
-        let surrogate_char = "𠀋"; // U+2000B, a surrogate pair
-        let cp = CodePoints::new(vec![0x2000B, 0x3042, 0x3044]); // surrogate + あ, い
-
-        assert!(cp.contains(surrogate_char));
-        assert!(cp.contains(&format!("{}あい", surrogate_char)));
-        assert!(!cp.contains(&format!("{}あいか", surrogate_char))); // か not in set
+        // U+2000B is outside the BMP; Rust represents it as a single char.
+        let cp = CodePoints::new(vec![0x2000B, 0x3042, 0x3044]);
+        assert!(cp.contains("𠀋あい"));
+        assert!(!cp.contains("𠀋あいか")); // か not in set
     }
 
     #[test]
     fn test_contains_mixed_characters() {
-        let cp = CodePoints::new(vec![0x3042, 0x3044, 0x3046, 0x3048, 0x304A, 0x2000B]); // あ,い,う,え,お + surrogate
-
-        let test_str = format!("{}あいうあ", "𠀋"); // surrogate + あいうあ
-        assert!(cp.contains(&test_str));
-
-        let invalid_str = format!("{}あいうか", "𠀋"); // surrogate + あいうか (か not in set)
-        assert!(!cp.contains(&invalid_str));
+        let cp = CodePoints::new(vec![0x3042, 0x3044, 0x3046, 0x3048, 0x304A, 0x2000B]);
+        assert!(cp.contains("𠀋あいうあ"));
+        assert!(!cp.contains("𠀋あいうか")); // か not in set
     }
+
+    // ── exclusion queries ─────────────────────────────────────────────────
 
     #[test]
     fn test_first_excluded() {
@@ -692,74 +646,142 @@ mod tests {
     }
 
     #[test]
-    fn test_first_excluded_with_surrogate_pairs() {
-        let cp = CodePoints::new(vec![0x3042, 0x3044, 0x2000B]); // あ, い, surrogate
-
-        let test_str = format!("{}あい", "𠀋");
-        assert_eq!(cp.first_excluded(&test_str), None);
-
-        let invalid_str = format!("{}あいう", "𠀋");
-        assert_eq!(cp.first_excluded(&invalid_str), Some(0x3046)); // う
+    fn test_first_excluded_empty() {
+        let cp = CodePoints::new(vec![0x3042]);
+        assert_eq!(cp.first_excluded(""), None);
     }
 
     #[test]
-    fn test_all_excluded() {
+    fn test_first_excluded_with_position() {
         let cp = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-        let excluded = cp.all_excluded("あいうえ");
-        assert_eq!(excluded, vec![0x3046, 0x3048]); // う, え
+        assert_eq!(cp.first_excluded_with_position("あいう"), Some((0x3046, 2)));
+        assert_eq!(cp.first_excluded_with_position("あい"), None);
     }
 
     #[test]
-    fn test_all_excluded_with_surrogate_pairs() {
-        let cp = CodePoints::new(vec![0x3042, 0x3044, 0x2000B]); // あ, い, surrogate
-
-        let test_str = format!("{}あいう", "𠀋");
-        let excluded = cp.all_excluded(&test_str);
-        assert_eq!(excluded, vec![0x3046]); // う
-
-        // Test with multiple invalid characters including surrogate pairs
-        let test_str2 = format!("{}あいうきかくか{}", "𠀋", "𠂟"); // き,か,く not in set, 2nd surrogate not in set
-        let excluded2 = cp.all_excluded(&test_str2);
-        // all_excluded guarantees order, so no need to sort
-        assert_eq!(excluded2, vec![0x3046, 0x304D, 0x304B, 0x304F, 0x2009F]); // う,き,か,く,2nd surrogate
+    fn test_first_excluded_surrogate() {
+        // あ, い, う
+        let cp = CodePoints::new(vec![0x3042, 0x3044, 0x3046]);
+        // 𠀋 (U+2000B) is the first excluded character
+        assert_eq!(cp.first_excluded("𠀋あいう"), Some(0x2000B));
     }
+
+    #[test]
+    fn test_all_excluded_order() {
+        // あ, い
+        let cp = CodePoints::new(vec![0x3042, 0x3044]);
+        // う appears before え; duplicate う is skipped
+        assert_eq!(cp.all_excluded("あいうえ"), vec![0x3046, 0x3048]);
+    }
+
+    #[test]
+    fn test_all_excluded_empty() {
+        let cp = CodePoints::new(vec![0x3042]);
+        assert_eq!(cp.all_excluded(""), Vec::<u32>::new());
+    }
+
+    #[test]
+    fn test_all_excluded_surrogate() {
+        // あ, い
+        let cp = CodePoints::new(vec![0x3042, 0x3044]);
+        // 𠀋 (U+2000B) then き (U+304D)
+        let result = cp.all_excluded("あ𠀋いき");
+        assert_eq!(result, vec![0x2000B, 0x304D]);
+    }
+
+    #[test]
+    fn test_all_excluded_multiple_surrogates() {
+        let cp = CodePoints::new(vec![0x3042, 0x3044, 0x3046]); // あ, い, う
+        let result = cp.all_excluded("𠀋あいうきかくか𠂟");
+        // 𠀋, き, か, く, 𠂟  (か deduplicated)
+        assert_eq!(result, vec![0x2000B, 0x304D, 0x304B, 0x304F, 0x2009F]);
+    }
+
+    // ── validation ────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_validate_ok() {
+        let cp = CodePoints::ascii_printable();
+        assert!(cp.validate("Hello World!").is_ok());
+    }
+
+    #[test]
+    fn test_validate_err() {
+        let cp = CodePoints::ascii_printable();
+        let err = cp.validate("hello\0world").unwrap_err();
+        assert_eq!(err.code_point, 0);
+        assert_eq!(err.position, 5);
+    }
+
+    // ── set operations ────────────────────────────────────────────────────
 
     #[test]
     fn test_union() {
-        let cp1 = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-        let cp2 = CodePoints::new(vec![0x3044, 0x3046]); // い, う
-        let union = cp1.union(&cp2);
-        assert_eq!(union.len(), 3);
-        assert!(union.contains("あいう"));
+        let a = CodePoints::new(vec![0x3042, 0x3044]);
+        let b = CodePoints::new(vec![0x3044, 0x3046]);
+        let u = a.union(&b);
+        assert_eq!(u.len(), 3);
+        assert!(u.contains("あいう"));
     }
 
     #[test]
     fn test_intersection() {
-        let cp1 = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-        let cp2 = CodePoints::new(vec![0x3044, 0x3046]); // い, う
-        let intersection = cp1.intersection(&cp2);
-        assert_eq!(intersection.len(), 1);
-        assert!(intersection.contains("い"));
-        assert!(!intersection.contains("あ"));
-        assert!(!intersection.contains("う"));
+        let a = CodePoints::new(vec![0x3042, 0x3044]);
+        let b = CodePoints::new(vec![0x3044, 0x3046]);
+        let i = a.intersection(&b);
+        assert_eq!(i.len(), 1);
+        assert!(i.contains("い"));
+        assert!(!i.contains("あ"));
     }
 
     #[test]
     fn test_difference() {
-        let cp1 = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-        let cp2 = CodePoints::new(vec![0x3044, 0x3046]); // い, う
-        let difference = cp1.difference(&cp2);
-        assert_eq!(difference.len(), 1);
-        assert!(difference.contains("あ"));
-        assert!(!difference.contains("い"));
+        let a = CodePoints::new(vec![0x3042, 0x3044]);
+        let b = CodePoints::new(vec![0x3044, 0x3046]);
+        let d = a.difference(&b);
+        assert_eq!(d.len(), 1);
+        assert!(d.contains("あ"));
+        assert!(!d.contains("い"));
     }
+
+    #[test]
+    fn test_symmetric_difference() {
+        let a = CodePoints::new(vec![0x3042, 0x3044]);
+        let b = CodePoints::new(vec![0x3044, 0x3046]);
+        let s = a.symmetric_difference(&b);
+        assert_eq!(s.len(), 2);
+        assert!(s.contains("あ"));
+        assert!(s.contains("う"));
+        assert!(!s.contains("い"));
+    }
+
+    #[test]
+    fn test_subset_superset() {
+        let small = CodePoints::new(vec![0x3042]);
+        let big = CodePoints::new(vec![0x3042, 0x3044]);
+        assert!(small.is_subset_of(&big));
+        assert!(big.is_superset_of(&small));
+        assert!(!big.is_subset_of(&small));
+        assert!(!small.is_superset_of(&big));
+    }
+
+    #[test]
+    fn test_set_ops_with_empty() {
+        let cp = CodePoints::new(vec![0x3042, 0x3044]);
+        let empty = CodePoints::new(vec![]);
+
+        assert!(cp.intersection(&empty).is_empty());
+        assert_eq!(cp.union(&empty).len(), 2);
+        assert_eq!(cp.difference(&empty).len(), 2);
+        assert!(empty.difference(&cp).is_empty());
+    }
+
+    // ── ASCII factories ───────────────────────────────────────────────────
 
     #[test]
     fn test_ascii_control() {
         let cp = CodePoints::ascii_control();
-        assert!(cp.contains("\n"));
-        assert!(cp.contains("\r"));
-        assert!(cp.contains("\t"));
+        assert!(cp.contains("\n\r\t"));
         assert!(!cp.contains("a"));
         assert!(!cp.contains("あ"));
     }
@@ -767,261 +789,149 @@ mod tests {
     #[test]
     fn test_ascii_printable() {
         let cp = CodePoints::ascii_printable();
-        assert!(cp.contains("Hello"));
-        assert!(cp.contains("123"));
-        assert!(cp.contains("!@#$%"));
+        assert!(cp.contains("Hello 123!@#~"));
         assert!(!cp.contains("\n"));
         assert!(!cp.contains("あ"));
-
-        // Test specific characters from Java tests
-        assert!(cp.contains("Hello~"));
-        assert!(cp.contains("\\100"));
-        assert!(!cp.contains("Hello‾")); // Overline character
+        // JIS X 0201 special chars NOT in plain ASCII printable
+        assert!(!cp.contains("Hello‾")); // Overline
         assert!(!cp.contains("¥100")); // Yen symbol
     }
 
     #[test]
     fn test_crlf() {
         let cp = CodePoints::crlf();
-        assert!(cp.contains("\n"));
-        assert!(cp.contains("\r"));
-        assert!(!cp.contains("a"));
+        assert!(cp.contains("\r\n"));
         assert!(!cp.contains("\t"));
+        assert!(!cp.contains("a"));
     }
 
     #[test]
     fn test_ascii_all() {
         let cp = CodePoints::ascii_all();
-        assert!(cp.contains("Hello"));
-        assert!(cp.contains("\n"));
-        assert!(cp.contains("\r"));
-        assert!(cp.contains("123"));
+        assert!(cp.contains("Hello\n\r\t"));
         assert!(!cp.contains("あ"));
     }
 
     #[test]
-    fn test_first_excluded_with_position() {
-        let cp = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-        assert_eq!(cp.first_excluded_with_position("あい"), None);
-        // う at position 2
-        assert_eq!(cp.first_excluded_with_position("あいう"), Some((0x3046, 2)));
+    fn test_ascii_cached_identity() {
+        // Each cached() call must return the exact same pointer.
+        assert!(std::ptr::eq(
+            CodePoints::ascii_control_cached(),
+            CodePoints::ascii_control_cached()
+        ));
+        assert!(std::ptr::eq(
+            CodePoints::ascii_printable_cached(),
+            CodePoints::ascii_printable_cached()
+        ));
+        assert!(std::ptr::eq(
+            CodePoints::crlf_cached(),
+            CodePoints::crlf_cached()
+        ));
+        assert!(std::ptr::eq(
+            CodePoints::ascii_all_cached(),
+            CodePoints::ascii_all_cached()
+        ));
     }
 
     #[test]
-    fn test_is_subset_of() {
-        let cp1 = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-        let cp2 = CodePoints::new(vec![0x3042, 0x3044, 0x3046]); // あ, い, う
-        assert!(cp1.is_subset_of(&cp2));
-        assert!(!cp2.is_subset_of(&cp1));
+    fn test_ascii_cached_equals_uncached() {
+        assert_eq!(
+            *CodePoints::ascii_control_cached(),
+            CodePoints::ascii_control()
+        );
+        assert_eq!(
+            *CodePoints::ascii_printable_cached(),
+            CodePoints::ascii_printable()
+        );
+        assert_eq!(*CodePoints::crlf_cached(), CodePoints::crlf());
+        assert_eq!(*CodePoints::ascii_all_cached(), CodePoints::ascii_all());
+    }
+
+    // ── trait impls ───────────────────────────────────────────────────────
+
+    #[test]
+    fn test_display() {
+        let cp = CodePoints::new(vec![0x3042, 0x3044]);
+        assert_eq!(cp.to_string(), "CodePoints(2 items)");
     }
 
     #[test]
-    fn test_symmetric_difference() {
-        let cp1 = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-        let cp2 = CodePoints::new(vec![0x3044, 0x3046]); // い, う
-        let diff = cp1.symmetric_difference(&cp2);
-        assert_eq!(diff.len(), 2);
-        assert!(diff.contains("あ"));
-        assert!(diff.contains("う"));
-        assert!(!diff.contains("い"));
+    fn test_from_vec() {
+        let cp: CodePoints = vec![0x3042u32].into();
+        assert!(cp.contains("あ"));
     }
 
     #[test]
-    fn test_equals_and_hashcode() {
-        let cp1 = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-        let cp2 = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-        let cp3 = CodePoints::new(vec![0x3042, 0x3044, 0x3046]); // あ, い, う
+    fn test_from_str() {
+        let cp: CodePoints = "あい".into();
+        assert_eq!(cp.len(), 2);
+    }
 
-        assert_eq!(cp1, cp2);
-        assert_ne!(cp1, cp3);
-
-        // Hash codes should be equal for equal objects
+    #[test]
+    fn test_hash_consistency() {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
-        let mut hasher1 = DefaultHasher::new();
-        let mut hasher2 = DefaultHasher::new();
+        // Two sets with same elements but potentially different insertion order.
+        let a = CodePoints::new(vec![0x3042, 0x3044]);
+        let b = CodePoints::new(vec![0x3044, 0x3042]);
 
-        cp1.hash(&mut hasher1);
-        cp2.hash(&mut hasher2);
+        let mut h1 = DefaultHasher::new();
+        let mut h2 = DefaultHasher::new();
+        a.hash(&mut h1);
+        b.hash(&mut h2);
 
-        assert_eq!(hasher1.finish(), hasher2.finish());
+        assert_eq!(a, b);
+        assert_eq!(h1.finish(), h2.finish());
+    }
+
+    // ── contains_all_in_any ───────────────────────────────────────────────
+
+    #[test]
+    fn test_contains_all_in_any_basic() {
+        let hira = CodePoints::new(vec![0x3042, 0x3044, 0x3046]); // あ, い, う
+        let kata = CodePoints::new(vec![0x30A2, 0x30A4, 0x30A6]); // ア, イ, ウ
+
+        assert!(contains_all_in_any("あア", &[&hira, &kata]));
+        assert!(contains_all_in_any("あいう", &[&hira]));
+        assert!(contains_all_in_any("アイウ", &[&kata]));
+        assert!(!contains_all_in_any("xyz", &[&hira, &kata]));
+        assert!(!contains_all_in_any("あアx", &[&hira, &kata])); // x not in either
     }
 
     #[test]
-    fn test_from_string_with_duplicates() {
-        let cp = CodePoints::from_string("あいあい"); // Duplicate characters
-        assert_eq!(cp.len(), 2); // Should deduplicate
-        assert!(cp.contains("あ"));
-        assert!(cp.contains("い"));
+    fn test_contains_all_in_any_empty_text() {
+        let cp = CodePoints::new(vec![0x3042]);
+        // Empty text with non-empty sets → vacuously true
+        assert!(contains_all_in_any("", &[&cp]));
     }
 
     #[test]
-    fn test_empty_codepoints() {
-        let cp = CodePoints::new(vec![]);
-        assert!(cp.is_empty());
-        assert_eq!(cp.len(), 0);
-        assert!(cp.contains("")); // Empty string should be valid
-        assert!(!cp.contains("a")); // Any non-empty string should be invalid
+    fn test_contains_all_in_any_empty_sets() {
+        // Empty sets → always false
+        assert!(!contains_all_in_any("a", &[]));
+        assert!(!contains_all_in_any("", &[]));
     }
 
     #[test]
-    fn test_intersection_with_empty_sets() {
-        let cp1 = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-        let cp2 = CodePoints::new(vec![]); // Empty set
-
-        let intersection = cp1.intersection(&cp2);
-        assert!(intersection.is_empty());
-
-        let intersection2 = cp2.intersection(&cp1);
-        assert!(intersection2.is_empty());
-    }
-
-    #[test]
-    fn test_union_with_empty_sets() {
-        let cp1 = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-        let cp2 = CodePoints::new(vec![]); // Empty set
-
-        let union = cp1.union(&cp2);
-        assert_eq!(union.len(), 2);
-        assert!(union.contains("あい"));
-
-        let union2 = cp2.union(&cp1);
-        assert_eq!(union2.len(), 2);
-        assert!(union2.contains("あい"));
-    }
-
-    #[test]
-    fn test_difference_with_empty_sets() {
-        let cp1 = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-        let cp2 = CodePoints::new(vec![]); // Empty set
-
-        let difference = cp1.difference(&cp2);
-        assert_eq!(difference.len(), 2);
-        assert!(difference.contains("あい"));
-
-        let difference2 = cp2.difference(&cp1);
-        assert!(difference2.is_empty());
-    }
-
-    #[test]
-    fn test_contains_surrogate_pairs_not_allowed() {
-        // Test that surrogate pairs are not allowed when not in the set
-        let cp = CodePoints::new(vec![0x3042, 0x3044, 0x3046]); // あ, い, う
-        let surrogate_char = "𠀋"; // U+2000B
-
-        let test_str = format!("{}あいうあ{}", surrogate_char, surrogate_char);
-        assert!(!cp.contains(&test_str));
-    }
-
-    #[test]
-    fn test_first_excluded_with_surrogate_pairs_not_allowed() {
-        let cp = CodePoints::new(vec![0x3042, 0x3044, 0x3046]); // あ, い, う
-        let surrogate_char = "𠀋"; // U+2000B
-
-        let test_str = format!("{}あいうかき", surrogate_char);
-        assert_eq!(cp.first_excluded(&test_str), Some(0x2000B)); // First excluded is surrogate
-    }
-
-    #[test]
-    fn test_all_excluded_with_multiple_surrogate_pairs() {
-        let cp = CodePoints::new(vec![0x3042, 0x3044, 0x3046]); // あ, い, う
-        let surrogate1 = "𠀋"; // U+2000B
-        let surrogate2 = "𠂟"; // U+2009F
-
-        let test_str = format!("{}あいうきかくか{}", surrogate1, surrogate2);
-        let excluded = cp.all_excluded(&test_str);
-        assert_eq!(excluded, vec![0x2000B, 0x304D, 0x304B, 0x304F, 0x2009F]); // surrogate1, き, か, く, surrogate2
-    }
-
-    #[test]
-    fn test_first_excluded_null_and_empty() {
-        let cp = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-
-        // Test empty string (should return None)
-        assert_eq!(cp.first_excluded(""), None);
-    }
-
-    #[test]
-    fn test_all_excluded_null_and_empty() {
-        let cp = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
-
-        // Test empty string (should return empty vector)
-        assert_eq!(cp.all_excluded(""), vec![] as Vec<u32>);
-    }
-
-    #[test]
-    fn test_contains_all_in_any() {
-        let hiragana = CodePoints::new(vec![0x3042, 0x3044, 0x3046]); // あ, い, う
-        let katakana = CodePoints::new(vec![0x30A2, 0x30A4, 0x30A6]); // ア, イ, ウ
+    fn test_contains_all_in_any_three_sets() {
+        let hira = CodePoints::new(vec![0x3042]); // あ
+        let kata = CodePoints::new(vec![0x30A2]); // ア
         let ascii = CodePoints::ascii_printable();
 
-        // Test with empty list
-        assert!(!CodePoints::contains_all_in_any("test", &[]));
-
-        // Test where one collection accepts all characters
-        assert!(CodePoints::contains_all_in_any("あい", &[hiragana.clone()]));
-        assert!(CodePoints::contains_all_in_any("アイ", &[katakana.clone()]));
-
-        // Test mixed characters that are valid in different collections
-        let mixed_collections = [hiragana.clone(), katakana.clone()];
-        assert!(CodePoints::contains_all_in_any("あア", &mixed_collections)); // あ in hiragana, ア in katakana
-        assert!(CodePoints::contains_all_in_any("いイ", &mixed_collections)); // い in hiragana, イ in katakana
-
-        // Test with characters not in any collection
-        assert!(!CodePoints::contains_all_in_any("xyz", &mixed_collections)); // Latin chars not in either
-
-        // Test with some valid, some invalid characters
-        assert!(!CodePoints::contains_all_in_any("あアx", &mixed_collections)); // x not in either collection
-
-        // Test with three collections
-        let three_collections = [hiragana, katakana, ascii];
-        assert!(CodePoints::contains_all_in_any("あアA", &three_collections)); // Each char in different collection
-        assert!(CodePoints::contains_all_in_any("Hello", &three_collections)); // All in ASCII
-        assert!(!CodePoints::contains_all_in_any("あアAπ", &three_collections)); // π not in any collection
-
-        // Test empty string (should be valid for any non-empty collection list)
-        assert!(CodePoints::contains_all_in_any("", &three_collections));
+        // Each char in a different set
+        assert!(contains_all_in_any("あアA", &[&hira, &kata, &ascii]));
+        // π (U+03C0) not in any
+        assert!(!contains_all_in_any("あアAπ", &[&hira, &kata, &ascii]));
+        // "Hello" is entirely in ascii
+        assert!(contains_all_in_any("Hello", &[&hira, &kata, &ascii]));
     }
 
     #[test]
-    fn test_contains_all_in_any_edge_cases() {
-        let cp1 = CodePoints::new(vec![0x3042]); // あ
-        let cp2 = CodePoints::new(vec![0x3044]); // い
-
-        // Character that appears in multiple collections
-        let cp3 = CodePoints::new(vec![0x3042, 0x3046]); // あ, う
-        let collections = [cp1, cp2, cp3];
-
-        assert!(CodePoints::contains_all_in_any("あ", &collections)); // あ in cp1 and cp3
-        assert!(CodePoints::contains_all_in_any("い", &collections)); // い in cp2
-        assert!(CodePoints::contains_all_in_any("う", &collections)); // う in cp3
-        assert!(!CodePoints::contains_all_in_any("え", &collections)); // え not in any
-    }
-
-    #[test]
-    fn test_ascii_cached_methods() {
-        // Test that cached methods return the same instance
-        let control1 = CodePoints::ascii_control_cached();
-        let control2 = CodePoints::ascii_control_cached();
-        assert!(std::ptr::eq(control1, control2));
-
-        let printable1 = CodePoints::ascii_printable_cached();
-        let printable2 = CodePoints::ascii_printable_cached();
-        assert!(std::ptr::eq(printable1, printable2));
-
-        let crlf1 = CodePoints::crlf_cached();
-        let crlf2 = CodePoints::crlf_cached();
-        assert!(std::ptr::eq(crlf1, crlf2));
-
-        let all1 = CodePoints::ascii_all_cached();
-        let all2 = CodePoints::ascii_all_cached();
-        assert!(std::ptr::eq(all1, all2));
-
-        // Test functionality is the same as non-cached versions
-        assert_eq!(control1, &CodePoints::ascii_control());
-        assert_eq!(printable1, &CodePoints::ascii_printable());
-        assert_eq!(crlf1, &CodePoints::crlf());
-        assert_eq!(all1, &CodePoints::ascii_all());
+    fn test_contains_all_in_any_overlap() {
+        // Character present in multiple sets — should still pass.
+        let cp1 = CodePoints::new(vec![0x3042, 0x3046]); // あ, う
+        let cp2 = CodePoints::new(vec![0x3042, 0x3044]); // あ, い
+        assert!(contains_all_in_any("あいう", &[&cp1, &cp2]));
     }
 }

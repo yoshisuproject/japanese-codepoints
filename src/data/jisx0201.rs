@@ -176,6 +176,3 @@ pub const KATAKANA: &[u32] = &[
     0xFF9E, // ﾞ
     0xFF9F, // ﾟ
 ];
-
-/// All JIS X 0201 characters (Latin letters + Katakana)
-pub const ALL_JISX0201: &[u32] = include!(concat!(env!("OUT_DIR"), "/jisx0201_all.rs"));

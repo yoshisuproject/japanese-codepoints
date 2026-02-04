@@ -143,6 +143,3 @@ pub const CRLF_CHARS: &[u32] = &[
     0x000A, // LINE FEED
     0x000D, // CARRIAGE RETURN
 ];
-
-/// All ASCII characters (control + printable + CRLF)
-pub const ALL_ASCII: &[u32] = include!(concat!(env!("OUT_DIR"), "/ascii_all.rs"));

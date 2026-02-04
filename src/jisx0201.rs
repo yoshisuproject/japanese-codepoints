@@ -1,193 +1,177 @@
-//! JIS X 0201 character set support
+//! JIS X 0201 character set support.
 //!
-//! This module provides support for JIS X 0201 character set, which includes:
-//! - Latin letters (ASCII + some special characters)
-//! - Halfwidth katakana characters
+//! JIS X 0201 defines two sub-sets:
+//!
+//! | Type | Contents |
+//! |---|---|
+//! | [`LatinLetters`] | ASCII printable characters with `\` → `¥` and `~` → `‾` |
+//! | [`Katakana`] | Halfwidth katakana (U+FF61–U+FF9F) |
+//! | [`JisX0201`] | Union of the two above |
 //!
 //! # Examples
 //!
 //! ```rust
 //! use japanese_codepoints::jisx0201::{Katakana, LatinLetters};
 //!
-//! let katakana = Katakana::new();
-//! assert!(katakana.contains("ｱｲｳｴｵ"));
-//!
-//! let latin = LatinLetters::new();
-//! assert!(latin.contains("Hello World"));
-//! assert!(latin.contains("¥")); // Yen sign
+//! assert!(Katakana::cached().contains("ｱｲｳｴｵ"));
+//! assert!(LatinLetters::cached().contains("Hello¥‾"));
 //! ```
 
-use crate::codepoints::CodePoints;
-use std::sync::OnceLock;
+// ── boilerplate macro (same pattern as jisx0208) ──────────────────────────────
 
-/// JIS X 0201 Katakana (halfwidth kana) character set
-///
-/// Contains all halfwidth katakana characters from 0xFF61 to 0xFF9F.
-/// This includes special characters like ｡｢｣､･ and all halfwidth katakana.
-///
-/// # Examples
-///
-/// ```rust
-/// use japanese_codepoints::jisx0201::Katakana;
-///
-/// let katakana = Katakana::new();
-/// assert!(katakana.contains("ｱｲｳｴｵ"));
-/// assert!(katakana.contains("｡｢｣､･"));
-/// assert!(!katakana.contains("あいうえお")); // Fullwidth hiragana
-/// ```
-pub struct Katakana {
-    codepoints: CodePoints,
+macro_rules! charset {
+    (
+        $( #[$doc:meta] )*
+        $name:ident => $data:path
+    ) => {
+        $( #[$doc] )*
+        pub struct $name {
+            codepoints: crate::CodePoints,
+        }
+
+        impl $name {
+            /// Creates a new instance of this character set.
+            pub fn new() -> Self {
+                Self {
+                    codepoints: crate::CodePoints::from_slice($data),
+                }
+            }
+
+            /// Returns a cached static reference to this character set.
+            ///
+            /// The instance is initialized on first access via
+            /// [`std::sync::OnceLock`]; subsequent calls return the same
+            /// reference with no allocation.
+            pub fn cached() -> &'static Self {
+                static INSTANCE: std::sync::OnceLock<$name> = std::sync::OnceLock::new();
+                INSTANCE.get_or_init(Self::new)
+            }
+
+            /// Returns `true` if every character in `text` belongs to this set.
+            pub fn contains(&self, text: &str) -> bool {
+                self.codepoints.contains(text)
+            }
+
+            /// Returns the underlying [`crate::CodePoints`] collection.
+            pub fn codepoints(&self) -> &crate::CodePoints {
+                &self.codepoints
+            }
+
+            /// Validates that every character in `text` belongs to this set.
+            ///
+            /// Returns `Ok(())` on success, or a [`crate::ValidationError`]
+            /// identifying the first character that does not belong.
+            pub fn validate(&self, text: &str) -> Result<(), crate::validation::ValidationError> {
+                self.codepoints.validate(text)
+            }
+        }
+
+        impl Default for $name {
+            fn default() -> Self {
+                Self::new()
+            }
+        }
+    };
 }
 
-impl Katakana {
-    /// Creates a new Katakana character set
-    pub fn new() -> Self {
-        use crate::data::jisx0201::KATAKANA;
-        Self {
-            codepoints: CodePoints::new(KATAKANA.to_vec()),
-        }
-    }
+// ── leaf character sets ───────────────────────────────────────────────────────
 
-    /// Returns a cached instance of the Katakana character set.
+charset! {
+    /// JIS X 0201 **Katakana** (halfwidth kana) character set.
     ///
-    /// This method uses static caching to avoid repeated allocation.
-    /// Subsequent calls return a reference to the same cached instance.
+    /// Contains all 63 halfwidth katakana characters from U+FF61 to U+FF9F,
+    /// including the halfwidth punctuation marks `｡｢｣､･` and the voiced /
+    /// semi-voiced marks `ﾞﾟ`.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use japanese_codepoints::jisx0201::Katakana;
     ///
-    /// let katakana1 = Katakana::cached();
-    /// let katakana2 = Katakana::cached();
-    /// // Both references point to the same cached instance
-    /// assert!(katakana1.contains("ｱｲｳｴｵ"));
+    /// let k = Katakana::cached();
+    /// assert!(k.contains("ｱｲｳｴｵ"));
+    /// assert!(k.contains("｡｢｣､･"));
+    /// assert!(!k.contains("あいうえお")); // fullwidth hiragana
+    /// assert!(!k.contains("アイウエオ")); // fullwidth katakana
     /// ```
-    pub fn cached() -> &'static Katakana {
-        static KATAKANA: OnceLock<Katakana> = OnceLock::new();
-        KATAKANA.get_or_init(|| Katakana::new())
-    }
-
-    /// Checks if the given string contains only katakana characters
-    pub fn contains(&self, text: &str) -> bool {
-        self.codepoints.contains(text)
-    }
-
-    /// Returns the underlying code points
-    pub fn codepoints(&self) -> &CodePoints {
-        &self.codepoints
-    }
+    Katakana => crate::data::jisx0201::KATAKANA
 }
 
-impl Default for Katakana {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// JIS X 0201 Latin letters character set
-///
-/// Contains ASCII printable characters plus some JIS-specific characters:
-/// - Standard ASCII printable characters (0x0020-0x007E)
-/// - Yen sign (¥, 0x00A5)
-/// - Overline (‾, 0x203E)
-///
-/// # Examples
-///
-/// ```rust
-/// use japanese_codepoints::jisx0201::LatinLetters;
-///
-/// let latin = LatinLetters::new();
-/// assert!(latin.contains("Hello World"));
-/// assert!(latin.contains("¥")); // Yen sign
-/// assert!(latin.contains("‾")); // Overline
-/// assert!(!latin.contains("あいうえお")); // Japanese characters
-/// ```
-pub struct LatinLetters {
-    codepoints: CodePoints,
-}
-
-impl LatinLetters {
-    /// Creates a new Latin letters character set
-    pub fn new() -> Self {
-        use crate::data::jisx0201::LATIN_LETTERS;
-        Self {
-            codepoints: CodePoints::new(LATIN_LETTERS.to_vec()),
-        }
-    }
-
-    /// Returns a cached instance of the LatinLetters character set.
+charset! {
+    /// JIS X 0201 **Latin letters** character set.
     ///
-    /// This method uses static caching to avoid repeated allocation.
-    /// Subsequent calls return a reference to the same cached instance.
+    /// This is almost identical to ASCII printable (U+0020–U+007E), but with
+    /// two substitutions mandated by the standard:
+    ///
+    /// * U+005C (`\`) is replaced by U+00A5 (`¥`, yen sign).
+    /// * U+007E (`~`) is replaced by U+203E (`‾`, overline).
     ///
     /// # Examples
     ///
     /// ```rust
     /// use japanese_codepoints::jisx0201::LatinLetters;
     ///
-    /// let latin1 = LatinLetters::cached();
-    /// let latin2 = LatinLetters::cached();
-    /// // Both references point to the same cached instance
-    /// assert!(latin1.contains("Hello¥"));
+    /// let l = LatinLetters::cached();
+    /// assert!(l.contains("Hello World"));
+    /// assert!(l.contains("¥100"));  // yen sign allowed
+    /// assert!(l.contains("‾"));     // overline allowed
+    /// assert!(!l.contains("\\")); // backslash NOT in JIS X 0201 Latin
     /// ```
-    pub fn cached() -> &'static LatinLetters {
-        static LATIN_LETTERS: OnceLock<LatinLetters> = OnceLock::new();
-        LATIN_LETTERS.get_or_init(|| LatinLetters::new())
-    }
-
-    /// Checks if the given string contains only Latin letters
-    pub fn contains(&self, text: &str) -> bool {
-        self.codepoints.contains(text)
-    }
-
-    /// Returns the underlying code points
-    pub fn codepoints(&self) -> &CodePoints {
-        &self.codepoints
-    }
+    LatinLetters => crate::data::jisx0201::LATIN_LETTERS
 }
 
-impl Default for LatinLetters {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// ── composite: full JIS X 0201 ────────────────────────────────────────────────
 
-/// JIS X 0201 complete character set
-///
-/// Contains all JIS X 0201 characters (Latin letters + Katakana).
+/// Complete JIS X 0201 character set (Latin letters ∪ halfwidth katakana).
 ///
 /// # Examples
 ///
 /// ```rust
 /// use japanese_codepoints::jisx0201::JisX0201;
 ///
-/// let jisx0201 = JisX0201::new();
-/// assert!(jisx0201.contains("Hello World"));
-/// assert!(jisx0201.contains("ｱｲｳｴｵ"));
-/// assert!(jisx0201.contains("¥｡｢｣､･"));
+/// let full = JisX0201::cached();
+/// assert!(full.contains("Hello¥｡｢｣ｱｲｳ"));
+/// assert!(!full.contains("あいうえお")); // fullwidth hiragana
 /// ```
 pub struct JisX0201 {
-    codepoints: CodePoints,
+    codepoints: crate::CodePoints,
 }
 
 impl JisX0201 {
-    /// Creates a new JIS X 0201 character set
+    /// Creates a new JIS X 0201 character set by combining the Latin and
+    /// Katakana sub-tables.
     pub fn new() -> Self {
-        use crate::data::jisx0201::ALL_JISX0201;
+        use crate::data::jisx0201::*;
+        use std::collections::HashSet;
+
+        let mut all = HashSet::new();
+        all.extend(LATIN_LETTERS.iter());
+        all.extend(KATAKANA.iter());
+
         Self {
-            codepoints: CodePoints::new(ALL_JISX0201.to_vec()),
+            codepoints: crate::CodePoints::new(all.into_iter().collect()),
         }
     }
 
-    /// Checks if the given string contains only JIS X 0201 characters
+    /// Returns a cached static reference to the full JIS X 0201 character set.
+    pub fn cached() -> &'static Self {
+        static INSTANCE: std::sync::OnceLock<JisX0201> = std::sync::OnceLock::new();
+        INSTANCE.get_or_init(Self::new)
+    }
+
+    /// Returns `true` if every character in `text` belongs to JIS X 0201.
     pub fn contains(&self, text: &str) -> bool {
         self.codepoints.contains(text)
     }
 
-    /// Returns the underlying code points
-    pub fn codepoints(&self) -> &CodePoints {
+    /// Returns the underlying [`crate::CodePoints`] collection.
+    pub fn codepoints(&self) -> &crate::CodePoints {
         &self.codepoints
+    }
+
+    /// Validates that every character in `text` belongs to JIS X 0201.
+    pub fn validate(&self, text: &str) -> Result<(), crate::validation::ValidationError> {
+        self.codepoints.validate(text)
     }
 }
 
@@ -197,43 +181,58 @@ impl Default for JisX0201 {
     }
 }
 
+// ── tests ─────────────────────────────────────────────────────────────────────
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    #[cfg(feature = "codepoints-jisx0201")]
-    fn test_katakana_new() {
-        let katakana = Katakana::new();
-        assert!(!katakana.codepoints().is_empty());
+    fn test_katakana() {
+        let k = Katakana::new();
+        assert!(!k.codepoints().is_empty());
+        assert!(k.contains("ｱｲｳｴｵ"));
+        assert!(k.contains("｡｢｣､･"));
+        assert!(!k.contains("あいうえお")); // fullwidth hiragana
+        assert!(!k.contains("アイウエオ")); // fullwidth katakana
+        assert!(!k.contains("Hello")); // latin
     }
 
     #[test]
-    #[cfg(feature = "codepoints-jisx0201")]
-    fn test_latin_letters_new() {
-        let latin = LatinLetters::new();
-        assert!(!latin.codepoints().is_empty());
+    fn test_latin_letters() {
+        let l = LatinLetters::new();
+        assert!(!l.codepoints().is_empty());
+        assert!(l.contains("Hello"));
+        assert!(l.contains("¥100")); // yen sign
+        assert!(l.contains("‾")); // overline
+        assert!(!l.contains("\\")); // backslash replaced by ¥
+        assert!(!l.contains("ｱｲｳｴｵ")); // halfwidth katakana
+        assert!(!l.contains("あいうえお")); // fullwidth hiragana
     }
 
     #[test]
-    #[cfg(feature = "codepoints-jisx0201")]
-    fn test_katakana_contains() {
-        let katakana = Katakana::new();
-        assert!(katakana.contains("ｱｲｳｴｵ"));
-        assert!(katakana.contains("｡｢｣､･"));
-        assert!(!katakana.contains("あいうえお")); // Fullwidth hiragana
-        assert!(!katakana.contains("アイウエオ")); // Fullwidth katakana
-        assert!(!katakana.contains("Hello")); // Latin letters
+    fn test_jisx0201_composite() {
+        let full = JisX0201::new();
+        assert!(full.contains("Hello¥"));
+        assert!(full.contains("ｱｲｳｴｵ"));
+        assert!(full.contains("¥｡｢｣"));
+        assert!(!full.contains("あいうえお"));
+        assert!(!full.contains("アイウエオ"));
+        assert!(!full.contains("漢字"));
     }
 
     #[test]
-    #[cfg(feature = "codepoints-jisx0201")]
-    fn test_latin_letters_contains() {
-        let latin = LatinLetters::new();
-        assert!(latin.contains("Hello"));
-        assert!(latin.contains("¥100"));
-        assert!(latin.contains("‾")); // Overline
-        assert!(!latin.contains("ｱｲｳｴｵ")); // Halfwidth katakana
-        assert!(!latin.contains("あいうえお")); // Fullwidth hiragana
+    fn test_cached_identity() {
+        assert!(std::ptr::eq(Katakana::cached(), Katakana::cached()));
+        assert!(std::ptr::eq(LatinLetters::cached(), LatinLetters::cached()));
+        assert!(std::ptr::eq(JisX0201::cached(), JisX0201::cached()));
+    }
+
+    #[test]
+    fn test_validate() {
+        assert!(Katakana::cached().validate("ｱｲｳ").is_ok());
+        let err = Katakana::cached().validate("ｱｲA").unwrap_err();
+        assert_eq!(err.code_point, 0x41); // 'A'
+        assert_eq!(err.position, 2);
     }
 }

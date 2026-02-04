@@ -3,226 +3,253 @@
 [![crates.io](https://img.shields.io/crates/v/japanese-codepoints.svg)](https://crates.io/crates/japanese-codepoints)
 [![docs.rs](https://docs.rs/japanese-codepoints/badge.svg)](https://docs.rs/japanese-codepoints)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
+[![Dependency Status](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)](./Cargo.toml)
 
-A high-performance Rust library for Japanese character validation and code point handling based on JIS standards.
+A high-performance, zero-dependency Rust library for Japanese character validation and code point handling based on JIS standards.
 
-This library provides collections of Unicode code points for various Japanese character sets, with advanced validation macros and static caching for optimal performance. Perfect for input validation in systems with strict character requirements (e.g., legacy mainframe integration). It is a Rust port of the Java library `terasoluna-gfw-codepoints`.
+This library provides collections of Unicode code points for various Japanese character sets, with advanced validation macros and static caching for optimal performance. Perfect for input validation in systems with strict character requirements (e.g., legacy mainframe integration, payment systems, government applications).
+
+> **Rust port of** [`terasoluna-gfw-codepoints`](https://github.com/terasolunaorg/terasoluna-gfw) (Java) - reimagined with Rust's type system and zero-cost abstractions.
+
+## Features
+
+- **High Performance**: Static caching via `OnceLock` eliminates repeated allocations (1900× faster than creating new instances)
+- **Zero Dependencies**: No external dependencies for faster compile times and smaller binaries
+- **Type Safety**: Leverages Rust's ownership system to prevent runtime errors
+- **Feature Flags**: Compile only the character sets you need
+- **Validation Macros**: Ergonomic macros for common validation patterns
+- **Zero-Copy Operations**: Efficient set operations (union, intersection, difference)
 
 ## Character Sets
 
 The library is organized using feature flags to keep it lightweight. You only need to enable the character sets you require.
 
-| Feature Flag               | Description                                                          |
-| -------------------------- | -------------------------------------------------------------------- |
-| `default` (`codepoints`)   | Core `CodePoints` struct and basic ASCII sets.                       |
-| `codepoints-jisx0201`      | JIS X 0201: Half-width Katakana and Latin letters.                   |
-| `codepoints-jisx0208`      | JIS X 0208: Hiragana, Katakana, special characters, etc. (no Kanji). |
-| `codepoints-jisx0208kanji` | JIS X 0208: Level 1 and 2 Kanji (6,355 characters).                  |
-| `codepoints-jisx0213kanji` | JIS X 0213: Level 1, 2, 3, and 4 Kanji (10,050 characters).          |
-| `full`                     | Enables all the features above.                                      |
+| Feature Flag               | Characters | Description                                                                  |
+| :------------------------- | :--------- | :--------------------------------------------------------------------------- |
+| `default` (`codepoints`)   | 225        | Core `CodePoints` struct + ASCII control/printable                           |
+| `codepoints-jisx0201`      | 158        | JIS X 0201: Half-width Katakana (63) + Latin letters (95)                    |
+| `codepoints-jisx0208`      | ~700       | JIS X 0208: Hiragana, Katakana, Latin, Greek, Cyrillic, symbols, box-drawing |
+| `codepoints-jisx0208kanji` | 6,355      | JIS X 0208: Level 1 & 2 Kanji                                                |
+| `codepoints-jisx0213kanji` | 10,050     | JIS X 0213: Level 1-4 Kanji (extends JIS X 0208)                             |
+| `full`                     | ~17,500    | All character sets                                                           |
 
-## Installation
+### When to use which feature?
 
-Add this to your `Cargo.toml`. Enable the features you need.
-
-```toml
-[dependencies]
-# Minimal installation
-japanese-codepoints = "0.1.0"
-
-# To enable specific character sets, add features
-# For example, to get JIS X 0208 Hiragana, Katakana, and Kanji:
-japanese-codepoints = { version = "0.1.0", features = ["codepoints-jisx0208", "codepoints-jisx0208kanji"] }
-
-# To enable everything
-japanese-codepoints = { version = "0.1.0", features = ["full"] }
-```
+- **Web forms with Japanese input**: `codepoints-jisx0208` (Hiragana/Katakana)
+- **Legacy system integration**: `codepoints-jisx0201` (halfwidth) + `codepoints-jisx0208kanji`
+- **Full Japanese text support**: `full` or specific kanji features
+- **ASCII-only validation**: `default` (no extra features needed)
 
 ## Quick Start
 
-### Basic Character Set Validation
+### Requirements
+
+- **Rust**: 1.70+ (for `std::sync::OnceLock`)
+- **Edition**: 2021
+
+### Installation
+
+Add this to your `Cargo.toml`:
+
+```toml
+[dependencies]
+# Minimal: ASCII validation only
+japanese-codepoints = "0.1.0"
+
+# Specific character sets (recommended)
+japanese-codepoints = { version = "0.1.0", features = ["codepoints-jisx0208", "codepoints-jisx0208kanji"] }
+
+# Everything (largest binary size)
+japanese-codepoints = { version = "0.1.0", features = ["full"] }
+
+# Disable default features for minimal build
+japanese-codepoints = { version = "0.1.0", default-features = false, features = ["codepoints-jisx0208"] }
+```
+
+## Usage Examples
+
+### Basic Validation
 
 ```rust
-// This requires the `codepoints-jisx0208` feature
 use japanese_codepoints::jisx0208::Hiragana;
 
-// Create instance (or use cached version for better performance)
-let hiragana = Hiragana::new();
-let hiragana_cached = Hiragana::cached(); // 1900+ times faster!
+// Use cached instance for best performance
+let hiragana = Hiragana::cached();
 
-// Check if a string contains only hiragana characters
+// Validate string contains only hiragana
 assert!(hiragana.contains("あいうえお"));
-assert!(!hiragana.contains("あいうえおA")); // Contains 'A'
+assert!(!hiragana.contains("あいうえおA")); // 'A' is not hiragana
 
-// Find the first invalid character and its position
-if let Some((invalid_char, position)) = hiragana.codepoints().first_excluded_with_position("あいうえおA") {
+// Get detailed error information
+if let Some((invalid, pos)) = hiragana.codepoints().first_excluded_with_position("あいうえおA") {
     println!("Invalid char '{}' at position {}",
-             char::from_u32(invalid_char).unwrap(), position); // 'A' at position 5
+             char::from_u32(invalid).unwrap(), pos);
+    // Output: Invalid char 'A' at position 5
 }
-
-// Get all invalid characters
-let excluded: Vec<u32> = hiragana.codepoints().all_excluded("いろはABにほへとC");
-println!("Invalid codepoints: {:?}", excluded); // [65, 66, 67] (A, B, C)
 ```
 
 ### Validation Macros (Recommended)
 
-The easiest way to validate Japanese text:
-
 ```rust
 use japanese_codepoints::{validate_hiragana, validate_katakana, validate_japanese_mixed};
 
-// Simple hiragana validation
-validate_hiragana!("あいうえお")?; // OK
-validate_hiragana!("Hello")?;      // Error
+// Simple validation
+validate_hiragana!("あいうえお")?;  // OK
+validate_katakana!("アイウエオ")?;  // OK
 
-// Katakana validation
-validate_katakana!("アイウエオ")?; // OK
-
-// Mixed Japanese + ASCII validation
+// Mixed validation (Hiragana + Katakana + ASCII)
 validate_japanese_mixed!("こんにちはHello")?;  // OK
-validate_japanese_mixed!("こんにちは漢字")?;    // Error (contains kanji)
-
-// Advanced validation with custom error messages
-use japanese_codepoints::validate_codepoints_advanced;
-
-validate_codepoints_advanced!("hello", ascii_printable)?;
-validate_codepoints_advanced!("hello", hiragana.codepoints().clone(), "Only hiragana allowed")?;
+validate_japanese_mixed!("こんにちは漢字")?;   // Error: contains kanji
 ```
 
-### Multi-Character Set Validation
-
-Validate against multiple character sets - perfect for real-world Japanese text:
+### Multi-Set Validation
 
 ```rust
-// This requires `codepoints-jisx0208` and `codepoints-jisx0208kanji` features
-use japanese_codepoints::{jisx0208::Hiragana, jisx0208::Katakana, CodePoints};
+use japanese_codepoints::{contains_all_in_any, CodePoints};
+use japanese_codepoints::jisx0208::{Hiragana, Katakana};
 
-// Use cached versions for better performance
-let hiragana = Hiragana::cached();
-let katakana = Katakana::cached();
-let ascii = CodePoints::ascii_printable_cached();
-
-// Create collection of allowed character sets
 let allowed = [
-    hiragana.codepoints().clone(),
-    katakana.codepoints().clone(),
-    ascii.clone()
+    Hiragana::cached().codepoints(),
+    Katakana::cached().codepoints(),
+    CodePoints::ascii_printable_cached(),
 ];
 
-let mixed_text = "こんにちはHello";
-let japanese_only = "こんにちはアリガトウ";
-let invalid_text = "こんにちは漢字";
-
-// Check if text contains only characters from any of the allowed sets
-assert!(CodePoints::contains_all_in_any(mixed_text, &allowed));
-assert!(CodePoints::contains_all_in_any(japanese_only, &allowed));
-assert!(!CodePoints::contains_all_in_any(invalid_text, &allowed)); // Contains kanji
+// Each character must be in at least one set
+assert!(contains_all_in_any("こんにちはHello", &allowed));  // ✓ Hiragana + ASCII
+assert!(contains_all_in_any("アイウエオ", &allowed));       // ✓ Katakana
+assert!(!contains_all_in_any("こんにちは漢字", &allowed));  // ✗ Kanji not in any set
 ```
 
 ### Set Operations
 
-The `CodePoints` struct supports standard set operations to create custom validation rules:
-
 ```rust
-use japanese_codepoints::{jisx0208::Hiragana, jisx0208::Katakana, CodePoints};
+use japanese_codepoints::jisx0208::{Hiragana, Katakana};
 
 let hiragana = Hiragana::cached();
 let katakana = Katakana::cached();
 
-// Union: Combine character sets
-let kana = hiragana.codepoints().union(katakana.codepoints());
-assert!(kana.contains("あいうアイウ"));
-assert!(!kana.contains("あいうABC"));
+// Union: Combine sets
+let all_kana = hiragana.codepoints().union(katakana.codepoints());
+assert!(all_kana.contains("あいうアイウ"));
 
-// Difference: Remove specific characters
-let a_char = CodePoints::from_string("あ");
-let without_a = hiragana.codepoints().difference(&a_char);
-assert!(!without_a.contains("あ"));
-assert!(without_a.contains("いうえお"));
+// Custom character set
+let no_a = hiragana.codepoints().difference(&CodePoints::from_string("あ"));
+assert!(!no_a.contains("あ"));
+assert!(no_a.contains("いうえお"));
+```
 
-// Intersection: Find common characters (hiragana ∩ katakana = empty)
-let common = hiragana.codepoints().intersection(katakana.codepoints());
-assert!(common.is_empty());
+## Comparison with Java Original
 
-// Symmetric difference: Characters in either set but not both
-let sym_diff = hiragana.codepoints().symmetric_difference(katakana.codepoints());
-assert!(sym_diff.contains("あ")); // Only in hiragana
-assert!(sym_diff.contains("ア")); // Only in katakana
+| Feature            | Java (terasoluna-gfw)            | Rust (this crate)       |
+| :----------------- | :------------------------------- | :---------------------- |
+| **Caching**        | `ConcurrentHashMap` + Reflection | `OnceLock` (lock-free)  |
+| **Memory Safety**  | Runtime checks                   | Compile-time guarantees |
+| **Dependencies**   | Jakarta Validation + Spring      | Zero dependencies       |
+| **Set Operations** | Basic (union, intersect)         | Full set algebra        |
+| **Error Handling** | Exceptions                       | `Result<T, E>`          |
+| **Validation**     | Annotation-based                 | Macros + Functions      |
+| **Binary Size**    | JVM + dependencies               | Native, minimal         |
+
+## Testing
+
+```bash
+# All tests
+cargo test --all-features
+
+# Documentation tests
+cargo test --doc --all-features
+
+# Examples
+cargo test --examples --all-features
+
+# Check all feature combinations
+cargo hack check --feature-powerset
 ```
 
 ## Examples
 
-### Comprehensive Validation Demo
-
-See all features in action:
-
 ```bash
-cargo run --example comprehensive_validation_example --features "codepoints-jisx0208,codepoints-jisx0201"
+# Comprehensive demo
+cargo run --example comprehensive_validation_example --features full
+
+# Individual character sets
+cargo run --example ascii_example
+cargo run --example jisx0201_example --features codepoints-jisx0201
+cargo run --example jisx0208_example --features codepoints-jisx0208
+cargo run --example jisx0208kanji_example --features codepoints-jisx0208kanji
+cargo run --example jisx0213kanji_example --features codepoints-jisx0213kanji
 ```
 
-This example demonstrates:
+## Architecture
 
-- ✨ All validation macros
-- 🚀 Caching performance (1900+ times faster!)
-- 🔧 Multi-character set validation
-- 📊 Performance benchmarks
+- Core Layer (always included)
+  - CodePoints (HashSet<u32> wrapper)
+  - Set operations (union, intersection, diff, etc.)
+  - ASCII sets (control, printable, all, crlf)
+- Character Set Modules (feature-gated)
+  - jisx0201: Latin + Halfwidth Katakana
+  - jisx0208: Hiragana, Katakana, Symbols, etc.
+  - jisx0208kanji: 6,355 JIS X 0208 Kanji
+  - jisx0213kanji: 10,050 JIS X 0213 Kanji
+- Validation Layer
+  - ValidationError (structured errors)
+  - Macros (validate_hiragana!, etc.)
 
-### Individual Character Set Examples
+## Common Pitfalls
 
-```bash
-# Basic CodePoints operations
-cargo run --example codepoints_example
+### UTF-8 vs Unicode Code Points
 
-# JIS X 0201 halfwidth characters
-cargo run --example jisx0201_example --features "codepoints-jisx0201"
+This library validates **Unicode code points** (scalar values), not bytes:
 
-# JIS X 0208 characters (hiragana, katakana, etc.)
-cargo run --example jisx0208_example --features "codepoints-jisx0208"
+```rust
+// ✓ Works: validates Unicode characters
+let hiragana = Hiragana::cached();
+hiragana.contains("あ");  // U+3042
 
-# JIS X 0208 Kanji characters
-cargo run --example jisx0208kanji_example --features "codepoints-jisx0208kanji"
-
-# JIS X 0213 extended Kanji
-cargo run --example jisx0213kanji_example --features "codepoints-jisx0213kanji"
+// ✗ Not for byte validation
+// For byte-level validation, use encoding_rs or similar
 ```
 
-## Performance
+### Cached vs New
 
-This library is designed for high-performance applications:
+Always use `cached()` in production:
 
-```bash
-# Run comprehensive benchmarks
-cargo bench --features "full"
+```rust
+// ✗ Creates new HashSet every call
+let h = Hiragana::new();
+
+// ✓ Zero-allocation after first call
+let h = Hiragana::cached();
 ```
 
-## Testing
+### Feature Flags
 
-Run the comprehensive test suite:
+Don't forget to enable features:
 
-```bash
-# Test all features
-cargo test --all-features
+```rust
+// Cargo.toml
+[dependencies]
+// ✗ This won't compile if you use JIS X 0208
+japanese-codepoints = "0.1.0"
 
-# Test specific features only
-cargo test --features "codepoints-jisx0208"
-
-# Include documentation tests
-cargo test --doc --all-features
-```
-
-All examples are also tested to ensure they work correctly:
-
-```bash
-# Test that all examples compile and run
-cargo test --examples --all-features
+// ✓ Enable the features you need
+japanese-codepoints = { version = "0.1.0", features = ["codepoints-jisx0208"] }
 ```
 
 ## License
 
 This project is licensed under either of:
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+- **Apache License, Version 2.0** ([LICENSE-APACHE](./LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+- **MIT license** ([LICENSE-MIT](./LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
 at your option.
+
+## Acknowledgments
+
+This is a Rust port of the [terasoluna gfw codepoints](https://github.com/terasolunaorg/terasoluna-gfw/tree/master/terasoluna-gfw-common-libraries/terasoluna-gfw-codepoints) library. Special thanks to the original authors for the excellent Java implementation.
+
+---
+
+**[Full Documentation](https://docs.rs/japanese-codepoints)** | **[Crates.io](https://crates.io/crates/japanese-codepoints)** | **[Repository](https://github.com/yoshisuproject/japanese-codepoints)**

@@ -1,63 +1,74 @@
-//! JIS X 0208 Kanji character set support
+//! JIS X 0208 Kanji character set support.
 //!
-//! This module provides kanji characters defined in JIS X 0208 standard.
+//! JIS X 0208 defines two tiers of kanji:
+//!
+//! * **Level 1** — 2 965 characters (rows 16–47), sorted by reading.
+//! * **Level 2** — 3 390 characters (rows 48–84), sorted by radical.
+//!
+//! [`JisX0208Kanji`] covers both tiers (6 355 characters in total).
 //!
 //! # Examples
 //!
 //! ```rust
-//! # #[cfg(feature = "codepoints-jisx0208kanji")]
 //! use japanese_codepoints::jisx0208kanji::JisX0208Kanji;
 //!
-//! # #[cfg(feature = "codepoints-jisx0208kanji")]
-//! let kanji = JisX0208Kanji::new();
-//! # #[cfg(feature = "codepoints-jisx0208kanji")]
+//! let kanji = JisX0208Kanji::cached();
 //! assert!(kanji.contains("亜愛安以伊位一乙王黄"));
-//! ```
-//!
-//! # Level 1 and Level 2 Kanji
-//!
-//! JIS X 0208 defines two levels of kanji:
-//!
-//! - **Level 1**: 2,965 characters (rows 16-47)
-//! - **Level 2**: 3,390 characters (rows 48-84)
-//!
-//! ```rust
-//! # #[cfg(feature = "codepoints-jisx0208kanji")]
-//! use japanese_codepoints::jisx0208kanji::JisX0208Kanji;
-//!
-//! # #[cfg(feature = "codepoints-jisx0208kanji")]
-//! let kanji = JisX0208Kanji::new();
-//! # #[cfg(feature = "codepoints-jisx0208kanji")]
-//! let codepoints = kanji.codepoints_vec();
+//! assert!(!kanji.contains("ABC"));
 //! ```
 
 use crate::CodePoints;
 
-/// JIS X 0208 Kanji character set
+/// JIS X 0208 Kanji character set (Level 1 + Level 2).
 ///
-/// Contains Level 1 kanji (rows 16-47) and Level 2 kanji (rows 48-84) from JIS X 0208 standard
-/// Total of 6,355 kanji characters
+/// Contains 6 355 kanji characters as specified in JIS X 0208.
 #[derive(Debug, Clone)]
 pub struct JisX0208Kanji {
-    pub all: CodePoints,
+    codepoints: CodePoints,
 }
 
 impl JisX0208Kanji {
-    /// Create a new JIS X 0208 kanji character set instance
+    /// Creates a new JIS X 0208 Kanji character set.
     pub fn new() -> Self {
         Self {
-            all: CodePoints::new(crate::data::jisx0208kanji::JISX0208_CHARS.to_vec()),
+            codepoints: CodePoints::from_slice(crate::data::jisx0208kanji::JISX0208_CHARS),
         }
     }
 
-    /// Get all kanji codepoints as `Vec<u32>`
-    pub fn codepoints_vec(&self) -> Vec<u32> {
-        self.all.iter().copied().collect()
+    /// Returns a cached static reference to the JIS X 0208 Kanji set.
+    ///
+    /// The instance is initialized on first access; subsequent calls return
+    /// the same reference with no allocation.
+    pub fn cached() -> &'static Self {
+        static INSTANCE: std::sync::OnceLock<JisX0208Kanji> = std::sync::OnceLock::new();
+        INSTANCE.get_or_init(Self::new)
     }
 
-    /// Check if a string consists entirely of JIS X 0208 kanji characters
+    /// Returns `true` if every character in `text` is a JIS X 0208 kanji.
     pub fn contains(&self, s: &str) -> bool {
-        self.all.contains(s)
+        self.codepoints.contains(s)
+    }
+
+    /// Returns the underlying [`CodePoints`] collection.
+    pub fn codepoints(&self) -> &CodePoints {
+        &self.codepoints
+    }
+
+    /// Returns all kanji code points as a `Vec<u32>`.
+    ///
+    /// > **Note:** the order of elements is **not** guaranteed (determined by
+    /// > the internal `HashSet`).  Use `.len()` on the result if you only need
+    /// > the count; prefer [`Self::codepoints`] for membership checks.
+    pub fn codepoints_vec(&self) -> Vec<u32> {
+        self.codepoints.iter().copied().collect()
+    }
+
+    /// Validates that every character in `text` is a JIS X 0208 kanji.
+    ///
+    /// Returns `Ok(())` on success, or a [`crate::ValidationError`]
+    /// identifying the first non-kanji character.
+    pub fn validate(&self, text: &str) -> Result<(), crate::validation::ValidationError> {
+        self.codepoints.validate(text)
     }
 }
 
@@ -72,60 +83,84 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_jisx0208kanji_new() {
+    fn test_count() {
         let kanji = JisX0208Kanji::new();
         assert_eq!(kanji.codepoints_vec().len(), 6355);
     }
 
     #[test]
-    fn test_jisx0208kanji_default() {
-        let kanji = JisX0208Kanji::default();
-        assert_eq!(kanji.codepoints_vec().len(), 6355);
+    fn test_default_equals_new() {
+        assert_eq!(
+            JisX0208Kanji::default().codepoints_vec().len(),
+            JisX0208Kanji::new().codepoints_vec().len()
+        );
     }
 
     #[test]
-    fn test_jisx0208kanji_contains_common_kanji() {
+    fn test_common_level1_kanji() {
         let kanji = JisX0208Kanji::new();
-        let codepoints = kanji.codepoints_vec();
-
-        // Test some common kanji
-        assert!(codepoints.contains(&0x4E9C)); // 亜
-        assert!(codepoints.contains(&0x611B)); // 愛
-        assert!(codepoints.contains(&0x5B89)); // 安
-        assert!(codepoints.contains(&0x4EE5)); // 以
-        assert!(codepoints.contains(&0x4F0A)); // 伊
-        assert!(codepoints.contains(&0x4F4D)); // 位
-        assert!(codepoints.contains(&0x4E00)); // 一
-        assert!(codepoints.contains(&0x4E59)); // 乙
-        assert!(codepoints.contains(&0x738B)); // 王
-        assert!(codepoints.contains(&0x9EC4)); // 黄
+        // Spot-check well-known Level 1 kanji
+        for &cp in &[
+            0x4E9C, // 亜
+            0x611B, // 愛
+            0x5B89, // 安
+            0x4EE5, // 以
+            0x4F0A, // 伊
+            0x4F4D, // 位
+            0x4E00, // 一
+            0x4E59, // 乙
+            0x738B, // 王
+            0x9EC4, // 黄
+        ] {
+            assert!(
+                kanji.codepoints().iter().any(|&x| x == cp),
+                "missing Level 1 kanji U+{:04X}",
+                cp
+            );
+        }
     }
 
     #[test]
-    fn test_jisx0208kanji_contains_level2_kanji() {
+    fn test_level2_kanji() {
         let kanji = JisX0208Kanji::new();
-        let codepoints = kanji.codepoints_vec();
-
-        // Test some Level 2 kanji
-        assert!(codepoints.contains(&0x582F)); // 堯 (84-01)
-        assert!(codepoints.contains(&0x69C7)); // 槇 (84-02)
-        assert!(codepoints.contains(&0x9059)); // 遙 (84-03)
-        assert!(codepoints.contains(&0x7464)); // 瑤 (84-04)
-        assert!(codepoints.contains(&0x51DC)); // 凜 (84-05)
-        assert!(codepoints.contains(&0x7199)); // 熙 (84-06)
+        // Row 84 samples
+        for &cp in &[
+            0x582F, // 堯
+            0x69C7, // 槇
+            0x9059, // 遙
+            0x7464, // 瑤
+            0x51DC, // 凜
+            0x7199, // 熙
+        ] {
+            assert!(
+                kanji.codepoints().iter().any(|&x| x == cp),
+                "missing Level 2 kanji U+{:04X}",
+                cp
+            );
+        }
     }
 
     #[test]
-    fn test_jisx0208kanji_contains() {
+    fn test_contains_strings() {
         let kanji = JisX0208Kanji::new();
-
-        // Test containing kanji
         assert!(kanji.contains("亜愛安以伊位一乙王黄"));
-
-        // Test not containing non-kanji
         assert!(!kanji.contains("ABC123"));
+        assert!(!kanji.contains("亜ABC愛")); // mixed → false
+    }
 
-        // Test mixed content
-        assert!(!kanji.contains("亜ABC愛"));
+    #[test]
+    fn test_cached_identity() {
+        assert!(std::ptr::eq(
+            JisX0208Kanji::cached(),
+            JisX0208Kanji::cached()
+        ));
+    }
+
+    #[test]
+    fn test_validate() {
+        assert!(JisX0208Kanji::cached().validate("亜愛安").is_ok());
+        let err = JisX0208Kanji::cached().validate("亜A愛").unwrap_err();
+        assert_eq!(err.code_point, 0x41); // 'A'
+        assert_eq!(err.position, 1);
     }
 }

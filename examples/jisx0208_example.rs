@@ -1,7 +1,9 @@
-//! JIS X 0208 Example
+//! JIS X 0208 character set example (non-kanji).
 //!
-//! This example demonstrates the JIS X 0208 character set functionality.
-//! Run with: cargo run --example jisx0208_example --features codepoints-jisx0208
+//! Includes: Hiragana, Katakana, fullwidth Latin, Greek, Cyrillic,
+//! special characters, and box drawing characters.
+//!
+//! Run: `cargo run --example jisx0208_example --features codepoints-jisx0208`
 
 use japanese_codepoints::jisx0208::{
     BoxDrawingChars, CyrillicLetters, GreekLetters, Hiragana, JisX0208, Katakana, LatinLetters,
@@ -9,194 +11,106 @@ use japanese_codepoints::jisx0208::{
 };
 
 fn main() {
-    println!("=== JIS X 0208 Character Set Example ===\n");
+    // --- Hiragana ---
 
-    // Test Hiragana
-    println!("1. Hiragana (ひらがな) Test:");
-    let hiragana = Hiragana::new();
+    let hiragana = Hiragana::cached();
 
-    let hiragana_texts = vec![
-        "あいうえお",
-        "かきくけこ",
-        "さしすせそ",
-        "たちつてと",
-        "なにぬねの",
-    ];
+    assert!(hiragana.contains("あいうえお"));
+    assert!(hiragana.contains("がぎぐげご")); // voiced
+    assert!(hiragana.contains("ぱぴぷぺぽ")); // semi-voiced
+    assert!(!hiragana.contains("アイウエオ")); // katakana
+    assert!(!hiragana.contains("ABC"));
 
-    for text in &hiragana_texts {
-        let result = if hiragana.contains(text) {
-            "✓"
-        } else {
-            "✗"
-        };
-        println!("  {} {} -> {}", result, text, text);
-    }
+    println!("Hiragana: {} chars", hiragana.codepoints().len());
 
-    // Test Katakana
-    println!("\n2. Katakana (カタカナ) Test:");
-    let katakana = Katakana::new();
+    // --- Katakana ---
 
-    let katakana_texts = vec![
-        "アイウエオ",
-        "カキクケコ",
-        "サシスセソ",
-        "タチツテト",
-        "ナニヌネノ",
-    ];
+    let katakana = Katakana::cached();
 
-    for text in &katakana_texts {
-        let result = if katakana.contains(text) {
-            "✓"
-        } else {
-            "✗"
-        };
-        println!("  {} {} -> {}", result, text, text);
-    }
+    assert!(katakana.contains("アイウエオ"));
+    assert!(katakana.contains("ガギグゲゴ"));
+    assert!(!katakana.contains("あいうえお"));
 
-    // Test Latin Letters
-    println!("\n3. Latin Letters (fullwidth) Test:");
-    let latin = LatinLetters::new();
+    println!("Katakana: {} chars", katakana.codepoints().len());
 
-    let latin_texts = vec![
-        "ＡＢＣＤＥ",
-        "ａｂｃｄｅ",
-        "１２３４５",
-        "ＦＧＨＩＪ",
-        "ｆｇｈｉｊ",
-    ];
+    // --- Fullwidth Latin ---
 
-    for text in &latin_texts {
-        let result = if latin.contains(text) { "✓" } else { "✗" };
-        println!("  {} {} -> {}", result, text, text);
-    }
+    let latin = LatinLetters::cached();
 
-    // Test Greek Letters
-    println!("\n4. Greek Letters Test:");
-    let greek = GreekLetters::new();
+    assert!(latin.contains("ＡＢＣＤＥ"));
+    assert!(latin.contains("ａｂｃｄｅ"));
+    assert!(latin.contains("１２３４５"));
+    assert!(!latin.contains("ABCDE")); // halfwidth
 
-    let greek_texts = vec!["ΑΒΓΔΕ", "αβγδε", "ΖΗΘΙΚ", "ζηθικ"];
+    println!("Latin: {} chars", latin.codepoints().len());
 
-    for text in &greek_texts {
-        let result = if greek.contains(text) { "✓" } else { "✗" };
-        println!("  {} {} -> {}", result, text, text);
-    }
+    // --- Greek ---
 
-    // Test Cyrillic Letters
-    println!("\n5. Cyrillic Letters Test:");
-    let cyrillic = CyrillicLetters::new();
+    let greek = GreekLetters::cached();
 
-    let cyrillic_texts = vec!["АБВГД", "абвгд", "ЕЁЖЗИ", "еёжзи"];
+    assert!(greek.contains("ΑΒΓΔΕ"));
+    assert!(greek.contains("αβγδε"));
+    assert!(!greek.contains("ABC"));
 
-    for text in &cyrillic_texts {
-        let result = if cyrillic.contains(text) {
-            "✓"
-        } else {
-            "✗"
-        };
-        println!("  {} {} -> {}", result, text, text);
-    }
+    println!("Greek: {} chars", greek.codepoints().len());
 
-    // Test Special Characters
-    println!("\n6. Special Characters Test:");
-    let special = SpecialChars::new();
+    // --- Cyrillic ---
 
-    let special_texts = vec!["、。", "☆★", "→←", "①②③", "〒※"];
+    let cyrillic = CyrillicLetters::cached();
 
-    for text in &special_texts {
-        let result = if special.contains(text) { "✓" } else { "✗" };
-        println!("  {} {} -> {}", result, text, text);
-    }
+    assert!(cyrillic.contains("АБВГД"));
+    assert!(cyrillic.contains("абвгд"));
+    assert!(!cyrillic.contains("ABC"));
 
-    // Test Box Drawing Characters
-    println!("\n7. Box Drawing Characters Test:");
-    let box_drawing = BoxDrawingChars::new();
+    println!("Cyrillic: {} chars", cyrillic.codepoints().len());
 
-    let box_texts = vec!["─│┌┐", "└┘├┤", "┬┴┼", "━┃┏┓"];
+    // --- Special characters ---
 
-    for text in &box_texts {
-        let result = if box_drawing.contains(text) {
-            "✓"
-        } else {
-            "✗"
-        };
-        println!("  {} {} -> {}", result, text, text);
-    }
+    let special = SpecialChars::cached();
 
-    // Test mixed text (should work with complete set)
-    println!("\n8. Mixed Text Test (Complete JIS X 0208):");
-    let jisx0208 = JisX0208::new();
+    assert!(special.contains("、。"));
+    assert!(special.contains("☆★"));
+    assert!(special.contains("〒※"));
 
-    let mixed_texts = vec![
-        "あいうえおアイウエオ",
-        "ＡＢＣあいう",
-        "ΑΒΓあいう",
-        "АБВあいう",
-        "、。☆★あいう",
-        "─│┌┐あいう",
-    ];
+    println!("Special: {} chars", special.codepoints().len());
 
-    for text in &mixed_texts {
-        let result = if jisx0208.contains(text) {
-            "✓"
-        } else {
-            "✗"
-        };
-        println!("  {} {} -> {}", result, text, text);
-    }
+    // --- Box drawing ---
 
-    // Test invalid characters
-    println!("\n9. Invalid Characters Test:");
-    let invalid_texts = vec![
-        "漢字",           // Kanji not included in JIS X 0208 (non-kanji)
-        "ｱｲｳｴｵ",          // Halfwidth katakana (JIS X 0201)
-        "Hello",          // Halfwidth Latin
-        "あいうえお漢字", // Mixed with kanji
-    ];
+    let box_draw = BoxDrawingChars::cached();
 
-    for text in &invalid_texts {
-        let result = if jisx0208.contains(text) {
-            "✓"
-        } else {
-            "✗"
-        };
-        println!("  {} {} -> {}", result, text, text);
-    }
+    assert!(box_draw.contains("─│┌┐└┘"));
+    assert!(box_draw.contains("━┃┏┓┗┛"));
 
-    // Show character counts
-    println!("\n10. Character Counts:");
-    println!("  Hiragana: {} characters", hiragana.codepoints().len());
-    println!("  Katakana: {} characters", katakana.codepoints().len());
-    println!("  Latin Letters: {} characters", latin.codepoints().len());
-    println!("  Greek Letters: {} characters", greek.codepoints().len());
-    println!(
-        "  Cyrillic Letters: {} characters",
-        cyrillic.codepoints().len()
-    );
-    println!(
-        "  Special Characters: {} characters",
-        special.codepoints().len()
-    );
-    println!(
-        "  Box Drawing Characters: {} characters",
-        box_drawing.codepoints().len()
-    );
-    println!(
-        "  Total JIS X 0208: {} characters",
-        jisx0208.codepoints().len()
-    );
+    println!("Box drawing: {} chars", box_draw.codepoints().len());
 
-    // Show some sample code points
-    println!("\n11. Sample Code Points:");
-    println!(
-        "  Hiragana (first 5): {:?}",
-        &hiragana.codepoints().iter().take(5).collect::<Vec<_>>()
-    );
-    println!(
-        "  Katakana (first 5): {:?}",
-        &katakana.codepoints().iter().take(5).collect::<Vec<_>>()
-    );
-    println!(
-        "  Latin (first 5): {:?}",
-        &latin.codepoints().iter().take(5).collect::<Vec<_>>()
-    );
+    // --- Full JIS X 0208 (all combined) ---
+
+    let full = JisX0208::cached();
+
+    assert!(full.contains("あいうアイウ"));
+    assert!(full.contains("ＡＢＣあいう"));
+    assert!(full.contains("ΑΒΓαβγ"));
+    assert!(full.contains("АБВабв"));
+    assert!(full.contains("─│┌┐"));
+
+    // NOT included
+    assert!(!full.contains("漢字")); // kanji in separate module
+    assert!(!full.contains("ｱｲｳ")); // halfwidth katakana (JIS X 0201)
+    assert!(!full.contains("ABC")); // halfwidth Latin (ASCII)
+
+    println!("Full JIS X 0208: {} chars", full.codepoints().len());
+
+    // --- Validation ---
+
+    assert!(full.validate("あいうアイウ").is_ok());
+
+    let err = full.validate("あいう漢字").unwrap_err();
+    assert_eq!(err.code_point, '漢' as u32);
+    println!("Validation error: {}", err);
+
+    let err = full.validate("Hello").unwrap_err();
+    assert_eq!(err.code_point, 'H' as u32);
+    println!("Validation error: {}", err);
+
+    println!("All tests passed!");
 }

@@ -574,6 +574,3 @@ pub const BOX_DRAWING_CHARS: &[u32] = &[
     0x2538, // ┸ (02-31)
     0x2542, // ╂ (02-32)
 ];
-
-/// All JIS X 0208 characters
-pub const ALL_JISX0208: &[u32] = include!(concat!(env!("OUT_DIR"), "/jisx0208_all.rs"));
