@@ -1,16 +1,20 @@
 #[cfg(test)]
 mod tests {
     use crate::codepoints::CodePoints;
+    #[cfg(feature = "codepoints-jisx0201")]
     use crate::data::jisx0201::{
         KATAKANA as JISX0201_KATAKANA, LATIN_LETTERS as JISX0201_LATIN_LETTERS,
     };
+    #[cfg(feature = "codepoints-jisx0208")]
     use crate::data::jisx0208::{
         BOX_DRAWING_CHARS as JISX0208_BOX_DRAWING_CHARS,
         CYRILLIC_LETTERS as JISX0208_CYRILLIC_LETTERS, GREEK_LETTERS as JISX0208_GREEK_LETTERS,
         HIRAGANA as JISX0208_HIRAGANA, KATAKANA as JISX0208_KATAKANA,
         LATIN_LETTERS as JISX0208_LATIN_LETTERS, SPECIAL_CHARS as JISX0208_SPECIAL_CHARS,
     };
+    #[cfg(feature = "codepoints-jisx0208kanji")]
     use crate::data::jisx0208kanji::JISX0208_CHARS as JISX0208_KANJI;
+    #[cfg(feature = "codepoints-jisx0213kanji")]
     use crate::data::jisx0213kanji::JISX0213_KANJI;
 
     #[test]
@@ -38,6 +42,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "codepoints-jisx0201")]
     fn test_jisx0201_katakana() {
         let cp = CodePoints::new(JISX0201_KATAKANA.to_vec());
         assert!(cp.contains("｡｢｣､･ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝﾞﾟ"));
@@ -46,6 +51,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "codepoints-jisx0201")]
     fn test_jisx0201_latin_letters() {
         let cp = CodePoints::new(JISX0201_LATIN_LETTERS.to_vec());
         assert!(cp.contains("ABCDEFGHIJKLMNOPQRSTUVWXYZ"));
@@ -55,6 +61,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "codepoints-jisx0208")]
     fn test_jisx0208_hiragana() {
         let cp = CodePoints::new(JISX0208_HIRAGANA.to_vec());
         assert!(cp.contains("あいうえお"));
@@ -65,6 +72,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "codepoints-jisx0208")]
     fn test_jisx0208_katakana() {
         let cp = CodePoints::new(JISX0208_KATAKANA.to_vec());
         assert!(cp.contains("アイウエオ"));
@@ -74,6 +82,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "codepoints-jisx0208")]
     fn test_jisx0208_latin_letters() {
         let cp = CodePoints::new(JISX0208_LATIN_LETTERS.to_vec());
         assert!(cp.contains("ＡＢＣＤＥＦＧ"));
@@ -84,6 +93,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "codepoints-jisx0208")]
     fn test_jisx0208_greek_letters() {
         let cp = CodePoints::new(JISX0208_GREEK_LETTERS.to_vec());
         assert!(cp.contains("ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"));
@@ -92,6 +102,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "codepoints-jisx0208")]
     fn test_jisx0208_cyrillic_letters() {
         let cp = CodePoints::new(JISX0208_CYRILLIC_LETTERS.to_vec());
         assert!(cp.contains("АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ"));
@@ -100,6 +111,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "codepoints-jisx0208")]
     fn test_jisx0208_box_drawing_chars() {
         let cp = CodePoints::new(JISX0208_BOX_DRAWING_CHARS.to_vec());
         assert!(cp.contains("─│┌┐┘└├┬┤┴┼"));
@@ -107,6 +119,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "codepoints-jisx0208")]
     fn test_jisx0208_special_chars() {
         let cp = CodePoints::new(JISX0208_SPECIAL_CHARS.to_vec());
         assert!(cp.contains("、。，．・：；？！"));
@@ -114,6 +127,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "codepoints-jisx0208kanji")]
     fn test_jisx0208_kanji() {
         let cp = CodePoints::new(JISX0208_KANJI.to_vec());
         assert!(cp.contains(
@@ -126,6 +140,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "codepoints-jisx0213kanji")]
     fn test_jisx0213_kanji() {
         let cp = CodePoints::new(JISX0213_KANJI.to_vec());
         // Level 1
