@@ -205,23 +205,21 @@ fn group_caching(c: &mut Criterion) {
     group.sampling_mode(SamplingMode::Flat); // More accurate for fast operations
 
     // Compare create vs cached
-    group.bench_function("printable/create", |b| {
-        b.iter(|| CodePoints::ascii_printable())
-    });
+    group.bench_function("printable/create", |b| b.iter(CodePoints::ascii_printable));
     group.bench_function("printable/cached", |b| {
-        b.iter(|| CodePoints::ascii_printable_cached())
+        b.iter(CodePoints::ascii_printable_cached)
     });
 
-    group.bench_function("control/create", |b| b.iter(|| CodePoints::ascii_control()));
+    group.bench_function("control/create", |b| b.iter(CodePoints::ascii_control));
     group.bench_function("control/cached", |b| {
-        b.iter(|| CodePoints::ascii_control_cached())
+        b.iter(CodePoints::ascii_control_cached)
     });
 
-    group.bench_function("all/create", |b| b.iter(|| CodePoints::ascii_all()));
-    group.bench_function("all/cached", |b| b.iter(|| CodePoints::ascii_all_cached()));
+    group.bench_function("all/create", |b| b.iter(CodePoints::ascii_all));
+    group.bench_function("all/cached", |b| b.iter(CodePoints::ascii_all_cached));
 
-    group.bench_function("crlf/create", |b| b.iter(|| CodePoints::crlf()));
-    group.bench_function("crlf/cached", |b| b.iter(|| CodePoints::crlf_cached()));
+    group.bench_function("crlf/create", |b| b.iter(CodePoints::crlf));
+    group.bench_function("crlf/cached", |b| b.iter(CodePoints::crlf_cached));
 
     group.finish();
 }
@@ -270,12 +268,12 @@ fn group_jisx0201(c: &mut Criterion) {
     let mut group = c.benchmark_group("jisx0201");
 
     // Creation vs cached
-    group.bench_function("latin/create", |b| b.iter(|| LatinLetters::new()));
-    group.bench_function("latin/cached", |b| b.iter(|| LatinLetters::cached()));
-    group.bench_function("katakana/create", |b| b.iter(|| Katakana::new()));
-    group.bench_function("katakana/cached", |b| b.iter(|| Katakana::cached()));
-    group.bench_function("combined/create", |b| b.iter(|| JisX0201::new()));
-    group.bench_function("combined/cached", |b| b.iter(|| JisX0201::cached()));
+    group.bench_function("latin/create", |b| b.iter(LatinLetters::new));
+    group.bench_function("latin/cached", |b| b.iter(LatinLetters::cached));
+    group.bench_function("katakana/create", |b| b.iter(Katakana::new));
+    group.bench_function("katakana/cached", |b| b.iter(Katakana::cached));
+    group.bench_function("combined/create", |b| b.iter(JisX0201::new));
+    group.bench_function("combined/cached", |b| b.iter(JisX0201::cached));
 
     let latin = LatinLetters::cached();
     let katakana = Katakana::cached();
@@ -320,24 +318,22 @@ fn group_jisx0208(c: &mut Criterion) {
     let mut group = c.benchmark_group("jisx0208");
 
     // Creation vs cached for main types
-    group.bench_function("hiragana/create", |b| b.iter(|| Hiragana::new()));
-    group.bench_function("hiragana/cached", |b| b.iter(|| Hiragana::cached()));
-    group.bench_function("katakana/create", |b| b.iter(|| Katakana::new()));
-    group.bench_function("katakana/cached", |b| b.iter(|| Katakana::cached()));
-    group.bench_function("latin/create", |b| b.iter(|| LatinLetters::new()));
-    group.bench_function("latin/cached", |b| b.iter(|| LatinLetters::cached()));
-    group.bench_function("greek/create", |b| b.iter(|| GreekLetters::new()));
-    group.bench_function("greek/cached", |b| b.iter(|| GreekLetters::cached()));
-    group.bench_function("cyrillic/create", |b| b.iter(|| CyrillicLetters::new()));
-    group.bench_function("cyrillic/cached", |b| b.iter(|| CyrillicLetters::cached()));
-    group.bench_function("special/create", |b| b.iter(|| SpecialChars::new()));
-    group.bench_function("special/cached", |b| b.iter(|| SpecialChars::cached()));
-    group.bench_function("box_drawing/create", |b| b.iter(|| BoxDrawingChars::new()));
-    group.bench_function("box_drawing/cached", |b| {
-        b.iter(|| BoxDrawingChars::cached())
-    });
-    group.bench_function("combined/create", |b| b.iter(|| JisX0208::new()));
-    group.bench_function("combined/cached", |b| b.iter(|| JisX0208::cached()));
+    group.bench_function("hiragana/create", |b| b.iter(Hiragana::new));
+    group.bench_function("hiragana/cached", |b| b.iter(Hiragana::cached));
+    group.bench_function("katakana/create", |b| b.iter(Katakana::new));
+    group.bench_function("katakana/cached", |b| b.iter(Katakana::cached));
+    group.bench_function("latin/create", |b| b.iter(LatinLetters::new));
+    group.bench_function("latin/cached", |b| b.iter(LatinLetters::cached));
+    group.bench_function("greek/create", |b| b.iter(GreekLetters::new));
+    group.bench_function("greek/cached", |b| b.iter(GreekLetters::cached));
+    group.bench_function("cyrillic/create", |b| b.iter(CyrillicLetters::new));
+    group.bench_function("cyrillic/cached", |b| b.iter(CyrillicLetters::cached));
+    group.bench_function("special/create", |b| b.iter(SpecialChars::new));
+    group.bench_function("special/cached", |b| b.iter(SpecialChars::cached));
+    group.bench_function("box_drawing/create", |b| b.iter(BoxDrawingChars::new));
+    group.bench_function("box_drawing/cached", |b| b.iter(BoxDrawingChars::cached));
+    group.bench_function("combined/create", |b| b.iter(JisX0208::new));
+    group.bench_function("combined/cached", |b| b.iter(JisX0208::cached));
 
     let hiragana = Hiragana::cached();
     let katakana = Katakana::cached();
@@ -394,8 +390,8 @@ fn group_jisx0208kanji(c: &mut Criterion) {
     let kanji = JisX0208Kanji::cached();
 
     // Creation vs cached
-    group.bench_function("create", |b| b.iter(|| JisX0208Kanji::new()));
-    group.bench_function("cached", |b| b.iter(|| JisX0208Kanji::cached()));
+    group.bench_function("create", |b| b.iter(JisX0208Kanji::new));
+    group.bench_function("cached", |b| b.iter(JisX0208Kanji::cached));
 
     // Contains with different lengths
     group.bench_function("contains/3chars", |b| {
@@ -443,8 +439,8 @@ fn group_jisx0213kanji(c: &mut Criterion) {
     let kanji = JisX0213Kanji::cached();
 
     // Creation vs cached
-    group.bench_function("create", |b| b.iter(|| JisX0213Kanji::new()));
-    group.bench_function("cached", |b| b.iter(|| JisX0213Kanji::cached()));
+    group.bench_function("create", |b| b.iter(JisX0213Kanji::new));
+    group.bench_function("cached", |b| b.iter(JisX0213Kanji::cached));
 
     // Contains
     group.bench_function("contains/3chars", |b| {
@@ -498,7 +494,7 @@ fn group_large_text(c: &mut Criterion) {
     for (name, size) in &sizes {
         let text = "Hello World! Test ".repeat(size / 18);
         group.throughput(Throughput::Bytes(text.len() as u64));
-        group.bench_function(&format!("ascii/{}", name), |b| {
+        group.bench_function(format!("ascii/{}", name), |b| {
             b.iter(|| ascii.contains(black_box(&text)))
         });
     }
@@ -514,7 +510,7 @@ fn group_large_text(c: &mut Criterion) {
             let char_count = size / 3;
             let text = "日本国東京都".repeat(char_count / 5);
             group.throughput(Throughput::Bytes(text.len() as u64));
-            group.bench_function(&format!("kanji/{}", name), |b| {
+            group.bench_function(format!("kanji/{}", name), |b| {
                 b.iter(|| kanji.contains(black_box(&text)))
             });
         }
@@ -566,7 +562,7 @@ fn group_real_world(c: &mut Criterion) {
             b.iter(|| {
                 contains_all_in_any(
                     black_box(mixed_text),
-                    &[hiragana.codepoints(), katakana.codepoints(), &ascii],
+                    &[hiragana.codepoints(), katakana.codepoints(), ascii],
                 )
             })
         });
