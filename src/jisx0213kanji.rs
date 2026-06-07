@@ -21,64 +21,11 @@
 //! assert!(kanji.contains("堯槇遙瑤凜熙"));   // Level 3–4 additions
 //! ```
 
-use crate::CodePoints;
-
-/// JIS X 0213 Kanji character set (Level 1 + 2 + 3 + 4).
-///
-/// Contains 10 050 kanji characters as specified in JIS X 0213:2004.
-#[derive(Debug, Clone)]
-pub struct JisX0213Kanji {
-    codepoints: CodePoints,
-}
-
-impl JisX0213Kanji {
-    /// Creates a new JIS X 0213 Kanji character set.
-    pub fn new() -> Self {
-        Self {
-            codepoints: CodePoints::from_slice(crate::data::jisx0213kanji::JISX0213_KANJI),
-        }
-    }
-
-    /// Returns a cached static reference to the JIS X 0213 Kanji set.
+define_codepoint_set! {
+    /// JIS X 0213 Kanji character set (Level 1 + 2 + 3 + 4).
     ///
-    /// The instance is initialized on first access; subsequent calls return
-    /// the same reference with no allocation.
-    pub fn cached() -> &'static Self {
-        static INSTANCE: std::sync::OnceLock<JisX0213Kanji> = std::sync::OnceLock::new();
-        INSTANCE.get_or_init(Self::new)
-    }
-
-    /// Returns `true` if every character in `text` is a JIS X 0213 kanji.
-    pub fn contains(&self, s: &str) -> bool {
-        self.codepoints.contains(s)
-    }
-
-    /// Returns the underlying [`CodePoints`] collection.
-    pub fn codepoints(&self) -> &CodePoints {
-        &self.codepoints
-    }
-
-    /// Returns all kanji code points as a `Vec<u32>`.
-    ///
-    /// > **Note:** the order of elements is **not** guaranteed.  Use `.len()`
-    /// > for counting; prefer [`Self::codepoints`] for membership checks.
-    pub fn codepoints_vec(&self) -> Vec<u32> {
-        self.codepoints.iter().copied().collect()
-    }
-
-    /// Validates that every character in `text` is a JIS X 0213 kanji.
-    ///
-    /// Returns `Ok(())` on success, or a [`crate::ValidationError`]
-    /// identifying the first non-kanji character.
-    pub fn validate(&self, text: &str) -> Result<(), crate::validation::ValidationError> {
-        self.codepoints.validate(text)
-    }
-}
-
-impl Default for JisX0213Kanji {
-    fn default() -> Self {
-        Self::new()
-    }
+    /// Contains 10 050 kanji characters as specified in JIS X 0213:2004.
+    pub struct JisX0213Kanji => crate::data::jisx0213kanji::JISX0213_KANJI;
 }
 
 #[cfg(test)]

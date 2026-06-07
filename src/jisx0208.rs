@@ -33,68 +33,9 @@
 //! assert!(LatinLetters::cached().contains("ＡＢＣ"));
 //! ```
 
-// ── boilerplate macro ─────────────────────────────────────────────────────────
-// Generates a character-set struct with new / cached / contains / codepoints /
-// validate / Default.  Only used within this module.
-
-macro_rules! charset {
-    (
-        $( #[$doc:meta] )*
-        $name:ident => $data:path
-    ) => {
-        $( #[$doc] )*
-        pub struct $name {
-            codepoints: crate::CodePoints,
-        }
-
-        impl $name {
-            /// Creates a new instance of this character set.
-            pub fn new() -> Self {
-                Self {
-                    codepoints: crate::CodePoints::from_slice($data),
-                }
-            }
-
-            /// Returns a cached static reference to this character set.
-            ///
-            /// The instance is initialized on first access via
-            /// [`std::sync::OnceLock`]; subsequent calls return the same
-            /// reference with no allocation.
-            pub fn cached() -> &'static Self {
-                static INSTANCE: std::sync::OnceLock<$name> = std::sync::OnceLock::new();
-                INSTANCE.get_or_init(Self::new)
-            }
-
-            /// Returns `true` if every character in `text` belongs to this set.
-            pub fn contains(&self, text: &str) -> bool {
-                self.codepoints.contains(text)
-            }
-
-            /// Returns the underlying [`crate::CodePoints`] collection.
-            pub fn codepoints(&self) -> &crate::CodePoints {
-                &self.codepoints
-            }
-
-            /// Validates that every character in `text` belongs to this set.
-            ///
-            /// Returns `Ok(())` on success, or a [`crate::ValidationError`]
-            /// identifying the first character that does not belong.
-            pub fn validate(&self, text: &str) -> Result<(), crate::validation::ValidationError> {
-                self.codepoints.validate(text)
-            }
-        }
-
-        impl Default for $name {
-            fn default() -> Self {
-                Self::new()
-            }
-        }
-    };
-}
-
 // ── leaf character sets ───────────────────────────────────────────────────────
 
-charset! {
+define_codepoint_set! {
     /// JIS X 0208 **Hiragana** (ひらがな) character set.
     ///
     /// Contains all 83 hiragana characters from U+3041 to U+3093.
@@ -108,10 +49,10 @@ charset! {
     /// assert!(h.contains("あいうえお"));
     /// assert!(!h.contains("アイウエオ")); // katakana
     /// ```
-    Hiragana => crate::data::jisx0208::HIRAGANA
+    pub struct Hiragana => crate::data::jisx0208::HIRAGANA;
 }
 
-charset! {
+define_codepoint_set! {
     /// JIS X 0208 **Katakana** (カタカナ) character set.
     ///
     /// Contains katakana characters from U+30A1 to U+30F6.
@@ -125,10 +66,10 @@ charset! {
     /// assert!(k.contains("アイウエオ"));
     /// assert!(!k.contains("あいうえお")); // hiragana
     /// ```
-    Katakana => crate::data::jisx0208::KATAKANA
+    pub struct Katakana => crate::data::jisx0208::KATAKANA;
 }
 
-charset! {
+define_codepoint_set! {
     /// JIS X 0208 **fullwidth Latin** letters and digits.
     ///
     /// # Examples
@@ -140,10 +81,10 @@ charset! {
     /// assert!(l.contains("ＡＢＣａｂｃ１２３"));
     /// assert!(!l.contains("ABC")); // halfwidth
     /// ```
-    LatinLetters => crate::data::jisx0208::LATIN_LETTERS
+    pub struct LatinLetters => crate::data::jisx0208::LATIN_LETTERS;
 }
 
-charset! {
+define_codepoint_set! {
     /// JIS X 0208 **Greek** letters (upper- and lower-case).
     ///
     /// # Examples
@@ -153,10 +94,10 @@ charset! {
     ///
     /// assert!(GreekLetters::cached().contains("ΑΒΓαβγ"));
     /// ```
-    GreekLetters => crate::data::jisx0208::GREEK_LETTERS
+    pub struct GreekLetters => crate::data::jisx0208::GREEK_LETTERS;
 }
 
-charset! {
+define_codepoint_set! {
     /// JIS X 0208 **Cyrillic** letters (upper- and lower-case).
     ///
     /// # Examples
@@ -166,10 +107,10 @@ charset! {
     ///
     /// assert!(CyrillicLetters::cached().contains("АБВабв"));
     /// ```
-    CyrillicLetters => crate::data::jisx0208::CYRILLIC_LETTERS
+    pub struct CyrillicLetters => crate::data::jisx0208::CYRILLIC_LETTERS;
 }
 
-charset! {
+define_codepoint_set! {
     /// JIS X 0208 **special characters** — punctuation, symbols, arrows, stars,
     /// and similar glyphs.
     ///
@@ -180,10 +121,10 @@ charset! {
     ///
     /// assert!(SpecialChars::cached().contains("、。☆★→←"));
     /// ```
-    SpecialChars => crate::data::jisx0208::SPECIAL_CHARS
+    pub struct SpecialChars => crate::data::jisx0208::SPECIAL_CHARS;
 }
 
-charset! {
+define_codepoint_set! {
     /// JIS X 0208 **box-drawing** characters.
     ///
     /// # Examples
@@ -193,7 +134,7 @@ charset! {
     ///
     /// assert!(BoxDrawingChars::cached().contains("─│┌┐└┘├┤"));
     /// ```
-    BoxDrawingChars => crate::data::jisx0208::BOX_DRAWING_CHARS
+    pub struct BoxDrawingChars => crate::data::jisx0208::BOX_DRAWING_CHARS;
 }
 
 // ── composite: full JIS X 0208 (non-kanji) ────────────────────────────────────

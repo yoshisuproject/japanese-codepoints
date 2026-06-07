@@ -17,66 +17,9 @@
 //! assert!(LatinLetters::cached().contains("Hello¥‾"));
 //! ```
 
-// ── boilerplate macro (same pattern as jisx0208) ──────────────────────────────
-
-macro_rules! charset {
-    (
-        $( #[$doc:meta] )*
-        $name:ident => $data:path
-    ) => {
-        $( #[$doc] )*
-        pub struct $name {
-            codepoints: crate::CodePoints,
-        }
-
-        impl $name {
-            /// Creates a new instance of this character set.
-            pub fn new() -> Self {
-                Self {
-                    codepoints: crate::CodePoints::from_slice($data),
-                }
-            }
-
-            /// Returns a cached static reference to this character set.
-            ///
-            /// The instance is initialized on first access via
-            /// [`std::sync::OnceLock`]; subsequent calls return the same
-            /// reference with no allocation.
-            pub fn cached() -> &'static Self {
-                static INSTANCE: std::sync::OnceLock<$name> = std::sync::OnceLock::new();
-                INSTANCE.get_or_init(Self::new)
-            }
-
-            /// Returns `true` if every character in `text` belongs to this set.
-            pub fn contains(&self, text: &str) -> bool {
-                self.codepoints.contains(text)
-            }
-
-            /// Returns the underlying [`crate::CodePoints`] collection.
-            pub fn codepoints(&self) -> &crate::CodePoints {
-                &self.codepoints
-            }
-
-            /// Validates that every character in `text` belongs to this set.
-            ///
-            /// Returns `Ok(())` on success, or a [`crate::ValidationError`]
-            /// identifying the first character that does not belong.
-            pub fn validate(&self, text: &str) -> Result<(), crate::validation::ValidationError> {
-                self.codepoints.validate(text)
-            }
-        }
-
-        impl Default for $name {
-            fn default() -> Self {
-                Self::new()
-            }
-        }
-    };
-}
-
 // ── leaf character sets ───────────────────────────────────────────────────────
 
-charset! {
+define_codepoint_set! {
     /// JIS X 0201 **Katakana** (halfwidth kana) character set.
     ///
     /// Contains all 63 halfwidth katakana characters from U+FF61 to U+FF9F,
@@ -94,10 +37,10 @@ charset! {
     /// assert!(!k.contains("あいうえお")); // fullwidth hiragana
     /// assert!(!k.contains("アイウエオ")); // fullwidth katakana
     /// ```
-    Katakana => crate::data::jisx0201::KATAKANA
+    pub struct Katakana => crate::data::jisx0201::KATAKANA;
 }
 
-charset! {
+define_codepoint_set! {
     /// JIS X 0201 **Latin letters** character set.
     ///
     /// This is almost identical to ASCII printable (U+0020–U+007E), but with
@@ -117,7 +60,7 @@ charset! {
     /// assert!(l.contains("‾"));     // overline allowed
     /// assert!(!l.contains("\\")); // backslash NOT in JIS X 0201 Latin
     /// ```
-    LatinLetters => crate::data::jisx0201::LATIN_LETTERS
+    pub struct LatinLetters => crate::data::jisx0201::LATIN_LETTERS;
 }
 
 // ── composite: full JIS X 0201 ────────────────────────────────────────────────

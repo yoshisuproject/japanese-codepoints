@@ -40,6 +40,9 @@
 //! For a version that returns a structured error, see
 //! [`validation::validate_all_in_any`].
 
+#[macro_use]
+mod macros;
+
 pub mod codepoints;
 pub mod data;
 pub mod validation;
