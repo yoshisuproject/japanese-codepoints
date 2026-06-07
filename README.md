@@ -56,28 +56,28 @@ Minimal ASCII validation:
 
 ```toml
 [dependencies]
-japanese-codepoints = "0.2.0"
+japanese-codepoints = "0.3.0"
 ```
 
 Specific character sets:
 
 ```toml
 [dependencies]
-japanese-codepoints = { version = "0.2.0", features = ["codepoints-jisx0208", "codepoints-jisx0208kanji"] }
+japanese-codepoints = { version = "0.3.0", features = ["codepoints-jisx0208", "codepoints-jisx0208kanji"] }
 ```
 
 All character sets:
 
 ```toml
 [dependencies]
-japanese-codepoints = { version = "0.2.0", features = ["full"] }
+japanese-codepoints = { version = "0.3.0", features = ["full"] }
 ```
 
 Disable default features for a minimal build:
 
 ```toml
 [dependencies]
-japanese-codepoints = { version = "0.2.0", default-features = false, features = ["codepoints-jisx0208"] }
+japanese-codepoints = { version = "0.3.0", default-features = false, features = ["codepoints-jisx0208"] }
 ```
 
 ## Usage Examples

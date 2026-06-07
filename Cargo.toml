@@ -1,6 +1,6 @@
 [package]
 name = "japanese-codepoints"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Thomas Yang <ywjno.dev@gmail.com>"]
 description = "A high-performance Rust library for Japanese character validation and code point handling based on JIS standards"

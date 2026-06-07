@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-08
+
+### Added
+
+- Added feature gates to JIS data modules so unused character tables are not compiled unless their corresponding Cargo feature is enabled.
+- Added `first_excluded_in_any_with_position()` for diagnosing the first character that is rejected by all provided `CodePoints` sets.
+
+### Changed
+
+- Replaced duplicated character-set wrapper implementations with a shared `define_codepoint_set!` macro.
+- Updated JIS X 0201, JIS X 0208, JIS X 0208 Kanji, and JIS X 0213 Kanji wrappers to use the shared macro while preserving their public APIs.
+- Updated README validation examples for version `0.3.0`, feature requirements, Unicode scalar value behavior, and any-of diagnostics.
+
+### Fixed
+
+- Fixed any-of validation diagnostics so mixed valid characters are not reported as invalid when they belong to another allowed set.
+- Fixed stable `rustfmt` compatibility by removing nightly-only formatting options.
+- Fixed Clippy warnings in benchmarks and data-module tests.
+
 ## [0.2.0] - 2026-02-05
 
 ### Added
@@ -69,5 +88,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Feature-gated convenience macros: `validate_hiragana!`, `validate_katakana!`, etc.
 - Static caching via `std::sync::OnceLock` for zero-cost repeated access
 
+[0.3.0]: https://github.com/yoshisuproject/japanese-codepoints/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/yoshisuproject/japanese-codepoints/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/yoshisuproject/japanese-codepoints/releases/tag/v0.1.0
