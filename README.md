@@ -14,7 +14,7 @@ This library provides collections of Unicode code points for various Japanese ch
 
 ## Features
 
-- **High Performance**: Static caching via `OnceLock` eliminates repeated allocations (1900× faster than creating new instances)
+- **High Performance**: Static caching via `OnceLock` avoids repeated allocations
 - **Zero Dependencies**: No external dependencies for faster compile times and smaller binaries
 - **Type Safety**: Leverages Rust's ownership system to prevent runtime errors
 - **Feature Flags**: Compile only the character sets you need
@@ -50,26 +50,41 @@ The library is organized using feature flags to keep it lightweight. You only ne
 
 ### Installation
 
-Add this to your `Cargo.toml`:
+Add one of these entries to your `Cargo.toml`.
+
+Minimal ASCII validation:
 
 ```toml
 [dependencies]
-# Minimal: ASCII validation only
-japanese-codepoints = "0.1.0"
+japanese-codepoints = "0.2.0"
+```
 
-# Specific character sets (recommended)
-japanese-codepoints = { version = "0.1.0", features = ["codepoints-jisx0208", "codepoints-jisx0208kanji"] }
+Specific character sets:
 
-# Everything (largest binary size)
-japanese-codepoints = { version = "0.1.0", features = ["full"] }
+```toml
+[dependencies]
+japanese-codepoints = { version = "0.2.0", features = ["codepoints-jisx0208", "codepoints-jisx0208kanji"] }
+```
 
-# Disable default features for minimal build
-japanese-codepoints = { version = "0.1.0", default-features = false, features = ["codepoints-jisx0208"] }
+All character sets:
+
+```toml
+[dependencies]
+japanese-codepoints = { version = "0.2.0", features = ["full"] }
+```
+
+Disable default features for a minimal build:
+
+```toml
+[dependencies]
+japanese-codepoints = { version = "0.2.0", default-features = false, features = ["codepoints-jisx0208"] }
 ```
 
 ## Usage Examples
 
 ### Basic Validation
+
+Requires the `codepoints-jisx0208` feature.
 
 ```rust
 use japanese_codepoints::jisx0208::Hiragana;
@@ -91,22 +106,28 @@ if let Some((invalid, pos)) = hiragana.codepoints().first_excluded_with_position
 
 ### Validation Macros (Recommended)
 
+These macros require the `codepoints-jisx0208` feature.
+
 ```rust
 use japanese_codepoints::{validate_hiragana, validate_katakana, validate_japanese_mixed};
 
 // Simple validation
-validate_hiragana!("あいうえお")?;  // OK
-validate_katakana!("アイウエオ")?;  // OK
+assert!(validate_hiragana!("あいうえお").is_ok());
+assert!(validate_katakana!("アイウエオ").is_ok());
 
 // Mixed validation (Hiragana + Katakana + ASCII)
-validate_japanese_mixed!("こんにちはHello")?;  // OK
-validate_japanese_mixed!("こんにちは漢字")?;   // Error: contains kanji
+assert!(validate_japanese_mixed!("こんにちはHello").is_ok());
+assert!(validate_japanese_mixed!("こんにちは漢字").is_err()); // contains kanji
 ```
 
 ### Multi-Set Validation
 
+Requires the `codepoints-jisx0208` feature.
+
 ```rust
-use japanese_codepoints::{contains_all_in_any, CodePoints};
+use japanese_codepoints::{
+    contains_all_in_any, first_excluded_in_any_with_position, CodePoints,
+};
 use japanese_codepoints::jisx0208::{Hiragana, Katakana};
 
 let allowed = [
@@ -119,11 +140,22 @@ let allowed = [
 assert!(contains_all_in_any("こんにちはHello", &allowed));  // ✓ Hiragana + ASCII
 assert!(contains_all_in_any("アイウエオ", &allowed));       // ✓ Katakana
 assert!(!contains_all_in_any("こんにちは漢字", &allowed));  // ✗ Kanji not in any set
+
+if let Some((invalid, pos)) = first_excluded_in_any_with_position("こんにちは漢字", &allowed) {
+    println!(
+        "Invalid char '{}' at position {}",
+        char::from_u32(invalid).unwrap(),
+        pos
+    );
+}
 ```
 
 ### Set Operations
 
+Requires the `codepoints-jisx0208` feature.
+
 ```rust
+use japanese_codepoints::CodePoints;
 use japanese_codepoints::jisx0208::{Hiragana, Katakana};
 
 let hiragana = Hiragana::cached();
@@ -203,12 +235,17 @@ cargo run --example jisx0213kanji_example --features codepoints-jisx0213kanji
 This library validates **Unicode code points** (scalar values), not bytes:
 
 ```rust
-// ✓ Works: validates Unicode characters
-let hiragana = Hiragana::cached();
-hiragana.contains("あ");  // U+3042
+use japanese_codepoints::CodePoints;
 
-// ✗ Not for byte validation
-// For byte-level validation, use encoding_rs or similar
+// Works on Unicode scalar values, not UTF-8 bytes.
+let allowed = CodePoints::from_string("あ");
+assert!(allowed.contains("あ"));
+assert!(!allowed.contains("い"));
+
+// "あ" is one Unicode scalar value even though its UTF-8 representation uses
+// three bytes.
+assert_eq!("あ".chars().count(), 1);
+assert_eq!("あ".as_bytes().len(), 3);
 ```
 
 ### Cached vs New
@@ -221,20 +258,6 @@ let h = Hiragana::new();
 
 // ✓ Zero-allocation after first call
 let h = Hiragana::cached();
-```
-
-### Feature Flags
-
-Don't forget to enable features:
-
-```rust
-// Cargo.toml
-[dependencies]
-// ✗ This won't compile if you use JIS X 0208
-japanese-codepoints = "0.1.0"
-
-// ✓ Enable the features you need
-japanese-codepoints = { version = "0.1.0", features = ["codepoints-jisx0208"] }
 ```
 
 ## License
