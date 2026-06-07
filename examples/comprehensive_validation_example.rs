@@ -8,7 +8,7 @@
 //!
 //! Run: `cargo run --example comprehensive_validation_example --features full`
 
-use japanese_codepoints::{contains_all_in_any, CodePoints};
+use japanese_codepoints::{contains_all_in_any, first_excluded_in_any_with_position, CodePoints};
 
 fn main() {
     test_basic_validation();
@@ -169,6 +169,9 @@ fn test_multi_set_validation() {
         assert!(contains_all_in_any("Hello", sets));
         assert!(contains_all_in_any("こんにちはHello", sets));
         assert!(!contains_all_in_any("こんにちは漢字", sets)); // kanji
+
+        let excluded = first_excluded_in_any_with_position("こんにちは漢字", sets);
+        assert_eq!(excluded, Some(('漢' as u32, 5)));
     }
 
     println!("Multi-set validation OK");

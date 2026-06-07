@@ -58,7 +58,7 @@ pub mod jisx0213kanji;
 
 // ── re-exports ────────────────────────────────────────────────────────────────
 
-pub use codepoints::{contains_all_in_any, CodePoints};
+pub use codepoints::{contains_all_in_any, first_excluded_in_any_with_position, CodePoints};
 pub use validation::ValidationError;
 
 #[cfg(feature = "codepoints-jisx0201")]

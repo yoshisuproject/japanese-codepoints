@@ -4,9 +4,10 @@
 //! scalar values that can efficiently test membership for individual
 //! characters or entire strings.
 //!
-//! The free function [`contains_all_in_any`] extends membership testing to
-//! multiple sets at once — useful when a string may legally contain characters
-//! from several scripts simultaneously.
+//! The free functions [`contains_all_in_any`] and
+//! [`first_excluded_in_any_with_position`] extend membership testing to multiple
+//! sets at once — useful when a string may legally contain characters from
+//! several scripts simultaneously.
 
 use std::collections::HashSet;
 use std::fmt;
@@ -532,6 +533,47 @@ impl std::hash::Hash for CodePoints {
 
 // ── multi-set membership ──────────────────────────────────────────────────────
 
+/// Returns the first character in `text` that belongs to none of the provided
+/// character sets, together with its zero-based character index.
+///
+/// This is the diagnostic counterpart to [`contains_all_in_any`]. A character
+/// is valid if at least one `CodePoints` set contains it.
+///
+/// # Edge cases
+///
+/// * An empty `text` returns `None`.
+/// * An empty `sets` slice returns the first character in `text`, if any.
+///
+/// # Examples
+///
+/// ```rust
+/// use japanese_codepoints::{CodePoints, first_excluded_in_any_with_position};
+///
+/// let hiragana = CodePoints::new(vec![0x3042]); // あ
+/// let katakana = CodePoints::new(vec![0x30A2]); // ア
+///
+/// assert_eq!(
+///     first_excluded_in_any_with_position("あアx", &[&hiragana, &katakana]),
+///     Some((0x0078, 2))
+/// );
+/// assert_eq!(
+///     first_excluded_in_any_with_position("あア", &[&hiragana, &katakana]),
+///     None
+/// );
+/// ```
+pub fn first_excluded_in_any_with_position(
+    text: &str,
+    sets: &[&CodePoints],
+) -> Option<(u32, usize)> {
+    text.chars().enumerate().find_map(|(i, c)| {
+        if sets.iter().any(|set| set.contains_char(c)) {
+            None
+        } else {
+            Some((c as u32, i))
+        }
+    })
+}
+
 /// Returns `true` if **every** character in `text` belongs to **at least one**
 /// of the provided character sets.
 ///
@@ -562,8 +604,7 @@ pub fn contains_all_in_any(text: &str, sets: &[&CodePoints]) -> bool {
     if sets.is_empty() {
         return false;
     }
-    text.chars()
-        .all(|c| sets.iter().any(|set| set.contains_char(c)))
+    first_excluded_in_any_with_position(text, sets).is_none()
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────────
@@ -897,6 +938,26 @@ mod tests {
         assert!(contains_all_in_any("アイウ", &[&kata]));
         assert!(!contains_all_in_any("xyz", &[&hira, &kata]));
         assert!(!contains_all_in_any("あアx", &[&hira, &kata])); // x not in either
+    }
+
+    #[test]
+    fn test_first_excluded_in_any_with_position() {
+        let hira = CodePoints::new(vec![0x3042]); // あ
+        let kata = CodePoints::new(vec![0x30A2]); // ア
+
+        assert_eq!(
+            first_excluded_in_any_with_position("あアx", &[&hira, &kata]),
+            Some((0x0078, 2))
+        );
+        assert_eq!(
+            first_excluded_in_any_with_position("アあ", &[&hira, &kata]),
+            None
+        );
+        assert_eq!(
+            first_excluded_in_any_with_position("x", &[]),
+            Some((0x0078, 0))
+        );
+        assert_eq!(first_excluded_in_any_with_position("", &[]), None);
     }
 
     #[test]

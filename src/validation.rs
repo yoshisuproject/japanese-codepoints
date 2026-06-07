@@ -10,7 +10,7 @@
 
 use std::fmt;
 
-use crate::CodePoints;
+use crate::{first_excluded_in_any_with_position, CodePoints};
 
 // ── error type ────────────────────────────────────────────────────────────────
 
@@ -99,12 +99,11 @@ impl ValidationError {
 /// assert!(validate_all_in_any("あx", &[&hiragana, &katakana]).is_err());
 /// ```
 pub fn validate_all_in_any(text: &str, sets: &[&CodePoints]) -> Result<(), ValidationError> {
-    for (i, c) in text.chars().enumerate() {
-        if !sets.iter().any(|set| set.contains_char(c)) {
-            return Err(ValidationError::new(c as u32, i));
-        }
+    if let Some((code_point, position)) = first_excluded_in_any_with_position(text, sets) {
+        Err(ValidationError::new(code_point, position))
+    } else {
+        Ok(())
     }
-    Ok(())
 }
 
 // ── macros ────────────────────────────────────────────────────────────────────
@@ -331,6 +330,10 @@ mod tests {
         let err = validate_all_in_any("あx", &[&hira, &kata]).unwrap_err();
         assert_eq!(err.code_point, 0x78); // 'x'
         assert_eq!(err.position, 1);
+
+        let err = validate_all_in_any("あアx", &[&hira, &kata]).unwrap_err();
+        assert_eq!(err.code_point, 0x78); // 'x', not 'ア'
+        assert_eq!(err.position, 2);
     }
 
     #[test]
